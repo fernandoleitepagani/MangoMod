@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nirimod"
+version = "0.1.0"
+description = "A polished GTK4/libadwaita GUI configurator for the niri Wayland compositor"
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.12"
+dependencies = [
+    # PyGObject (gi.repository.Gtk, Adw) must be installed via system package manager:
+    # Arch:   sudo pacman -S python-gobject gtk4 libadwaita
+    # Fedora: sudo dnf install python3-gobject gtk4 libadwaita
+    # Ubuntu: sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
+]
+
+[project.scripts]
+nirimod = "nirimod.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nirimod"]
+
+[tool.ruff]
+ignore = ["E402"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
