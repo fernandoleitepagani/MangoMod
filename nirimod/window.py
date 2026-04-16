@@ -16,6 +16,7 @@ from nirimod import profiles as prof_mod
 from nirimod.theme import CSS
 
 SIDEBAR_PAGES = [
+    ("outputs", "video-display-symbolic", "Outputs"),
     ("keyboard", "input-keyboard-symbolic", "Keyboard"),
     ("mouse", "input-mouse-symbolic", "Mouse & Touchpad"),
     ("layout", "view-grid-symbolic", "Layout"),
@@ -256,6 +257,7 @@ class NiriModWindow(Adw.ApplicationWindow):
     def _build_all_pages(self):
         """Import and add all page widgets to the stack."""
         from nirimod.pages import (
+            outputs,
             keyboard,
             mouse,
             layout,
@@ -268,6 +270,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         )
 
         page_builders = {
+            "outputs": outputs.OutputsPage,
             "keyboard": keyboard.KeyboardPage,
             "mouse": mouse.MousePage,
             "layout": layout.LayoutPage,
