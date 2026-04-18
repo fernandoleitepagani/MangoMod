@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+  </defs>
+
+  <!-- Clean rounded background -->
+  <rect width="512" height="512" rx="128" fill="#111827" />
+
+  <!-- Geometric "N" abstraction - three columns with subtle overlap -->
+  <g transform="translate(141, 141)">
+    <!-- Column 1 (Background) -->
+    <path d="M 0 60 L 0 230 C 0 241 8 250 20 250 L 50 250 L 50 40 L 20 40 C 8 40 0 49 0 60 Z" fill="#374151" />
+    
+    <!-- Column 2 (Primary/Focused) -->
+    <rect x="65" y="0" width="100" height="230" rx="12" fill="url(#primaryGradient)" />
+    
+    <!-- Column 3 (Background) -->
+    <path d="M 180 30 L 180 200 C 180 211 188 220 200 220 L 230 220 L 230 10 L 200 10 C 188 10 180 19 180 30 Z" fill="#374151" />
+    
+    <!-- Bold negative space gap (N-shape bridge) -->
+    <path d="M 65 0 L 165 230" stroke="#111827" stroke-width="20" />
+  </g>
+</svg>
