@@ -48,7 +48,7 @@ class NiriModApp(Adw.Application):
     def __init__(self):
         super().__init__(
             application_id="io.github.nirimod",
-            flags=Gio.ApplicationFlags.FLAGS_NONE,
+            flags=Gio.ApplicationFlags.NON_UNIQUE,
         )
         GLib.set_application_name("NiriMod")
         GLib.set_prgname("nirimod")

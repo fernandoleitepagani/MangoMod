@@ -502,6 +502,9 @@ def find_or_create(nodes: list[KdlNode], *path: str) -> KdlNode:
         node = next((n for n in current_list if n.name == name), None)
         if node is None:
             node = KdlNode(name=name)
+            # give it a blank line so it doesn't get concatenated to
+            # whatever node came before it in the serialized output
+            node.leading_trivia = "\n"
             current_list.append(node)
         current_list = node.children
     return node  # type: ignore[return-value]
@@ -510,22 +513,43 @@ def find_or_create(nodes: list[KdlNode], *path: str) -> KdlNode:
 def set_child_arg(parent: KdlNode, child_name: str, value: Any) -> None:
     child = parent.get_child(child_name)
     if child is None:
-        child = KdlNode(name=child_name)
-        parent.children.append(child)
+        cache = getattr(parent, "_removed_children", {})
+        if child_name in cache:
+            idx, node = cache[child_name]
+            parent.children.insert(min(idx, len(parent.children)), node)
+            child = node
+        else:
+            child = KdlNode(name=child_name)
+            # Ensure it formats nicely if created from scratch
+            child.leading_trivia = "\n"
+            parent.children.append(child)
     child.args = [value]
     child.props = {}
 
 
 def remove_child(parent: KdlNode, child_name: str) -> None:
-    parent.children = [c for c in parent.children if c.name != child_name]
+    existing = parent.get_child(child_name)
+    if existing:
+        if not hasattr(parent, "_removed_children"):
+            parent._removed_children = {}
+        parent._removed_children[child_name] = (parent.children.index(existing), existing)
+        parent.children.remove(existing)
 
 
 def set_node_flag(parent: KdlNode, flag_name: str, enabled: bool) -> None:
     existing = parent.get_child(flag_name)
     if enabled and existing is None:
-        parent.children.insert(0, KdlNode(name=flag_name))
+        cache = getattr(parent, "_removed_children", {})
+        if flag_name in cache:
+            idx, node = cache[flag_name]
+            parent.children.insert(min(idx, len(parent.children)), node)
+        else:
+            parent.children.insert(0, KdlNode(name=flag_name))
     elif not enabled and existing is not None:
-        remove_child(parent, flag_name)
+        if not hasattr(parent, "_removed_children"):
+            parent._removed_children = {}
+        parent._removed_children[flag_name] = (parent.children.index(existing), existing)
+        parent.children.remove(existing)
 
 
 def get_nodes_section(nodes: list[KdlNode], name: str) -> KdlNode | None:
