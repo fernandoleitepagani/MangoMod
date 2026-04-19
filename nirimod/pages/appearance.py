@@ -22,7 +22,7 @@ def _parse_color(color_str: str) -> Gdk.RGBA:
 
 class AppearancePage(BasePage):
     def build(self) -> Gtk.Widget:
-        tb, _, _, content = make_toolbar_page("Appearance")
+        tb, _, _, content = self._make_toolbar_page("Appearance")
         self._content = content
         self._build_content()
         return tb
@@ -112,6 +112,71 @@ class AppearancePage(BasePage):
         )
         shadow_grp.add(draw_behind_row)
         content.append(shadow_grp)
+
+        blur_grp = Adw.PreferencesGroup(title="Blur (Global)")
+        blur_node = find_or_create(nodes, "blur")
+
+        passes_val = int(blur_node.child_arg("passes") or 0)
+        passes_adj = Gtk.Adjustment(value=passes_val, lower=0, upper=10, step_increment=1)
+        passes_row = Adw.SpinRow(title="Passes (0 = disabled)", adjustment=passes_adj, digits=0)
+
+        passes_row._last_val = passes_val
+
+        def _on_passes_changed(r, _):
+            new_val = int(r.get_value())
+            if new_val != getattr(r, "_last_val", None):
+                r._last_val = new_val
+                self._set_blur("passes", new_val)
+
+        passes_row.connect("notify::value", _on_passes_changed)
+        blur_grp.add(passes_row)
+
+        offset_val = float(blur_node.child_arg("offset") or 2.0)
+        offset_adj = Gtk.Adjustment(value=offset_val, lower=0.0, upper=20.0, step_increment=0.1)
+        offset_row = Adw.SpinRow(title="Offset", adjustment=offset_adj, digits=1)
+
+        offset_row._last_val = offset_val
+
+        def _on_offset_changed(r, _):
+            new_val = float(r.get_value())
+            if new_val != getattr(r, "_last_val", None):
+                r._last_val = new_val
+                self._set_blur("offset", new_val)
+
+        offset_row.connect("notify::value", _on_offset_changed)
+        blur_grp.add(offset_row)
+
+        noise_val = float(blur_node.child_arg("noise") or 0.0)
+        noise_adj = Gtk.Adjustment(value=noise_val, lower=0.0, upper=1.0, step_increment=0.01)
+        noise_row = Adw.SpinRow(title="Noise", adjustment=noise_adj, digits=2)
+
+        noise_row._last_val = noise_val
+
+        def _on_noise_changed(r, _):
+            new_val = float(r.get_value())
+            if new_val != getattr(r, "_last_val", None):
+                r._last_val = new_val
+                self._set_blur("noise", new_val)
+
+        noise_row.connect("notify::value", _on_noise_changed)
+        blur_grp.add(noise_row)
+
+        saturation_val = float(blur_node.child_arg("saturation") or 1.0)
+        saturation_adj = Gtk.Adjustment(value=saturation_val, lower=0.0, upper=5.0, step_increment=0.1)
+        saturation_row = Adw.SpinRow(title="Saturation", adjustment=saturation_adj, digits=1)
+
+        saturation_row._last_val = saturation_val
+
+        def _on_saturation_changed(r, _):
+            new_val = float(r.get_value())
+            if new_val != getattr(r, "_last_val", None):
+                r._last_val = new_val
+                self._set_blur("saturation", new_val)
+
+        saturation_row.connect("notify::value", _on_saturation_changed)
+        blur_grp.add(saturation_row)
+
+        content.append(blur_grp)
 
         misc_grp = Adw.PreferencesGroup(title="Window Geometry")
 
@@ -248,6 +313,11 @@ class AppearancePage(BasePage):
     def _set_shadow_color(self, rgba: Gdk.RGBA):
         set_child_arg(self._get_shadow_node(), "color", self._rgba_to_hex(rgba))
         self._commit("shadow color")
+
+    def _set_blur(self, prop: str, value):
+        blur_node = find_or_create(self._nodes, "blur")
+        set_child_arg(blur_node, prop, value)
+        self._commit(f"blur {prop}")
 
     def _set_corner_radius(self, radius: int):
         # Apply via global window-rule

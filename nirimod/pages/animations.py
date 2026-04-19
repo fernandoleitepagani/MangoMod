@@ -199,7 +199,7 @@ class BezierEditor(Gtk.DrawingArea):
 
 class AnimationsPage(BasePage):
     def build(self) -> Gtk.Widget:
-        tb, _, _, content = make_toolbar_page("Animations")
+        tb, _, _, content = self._make_toolbar_page("Animations")
         self._content = content
 
         anim_node = find_or_create(self._nodes, "animations")
@@ -235,40 +235,64 @@ class AnimationsPage(BasePage):
         content.append(off_grp)
 
         bezier_grp = Adw.PreferencesGroup(title="Easing Curve Editor")
-        bezier_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        bezier_box.set_margin_start(8)
-        bezier_box.set_margin_end(8)
-        bezier_box.set_margin_top(8)
-        bezier_box.set_margin_bottom(8)
+        
+        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        card.add_css_class("card")
+        card.set_margin_bottom(12)
 
+        # Editor side
+        edit_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        edit_vbox.set_margin_start(16)
+        edit_vbox.set_margin_top(16)
+        edit_vbox.set_margin_bottom(16)
+        
         self._bezier_editor = BezierEditor(on_changed=self._on_bezier_changed)
-        bezier_box.append(self._bezier_editor)
-
-        # Preset library + coordinate display
-        right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        right_box.set_vexpand(True)
+        edit_vbox.append(self._bezier_editor)
 
         coords_lbl = Gtk.Label(label="0.25, 0.1, 0.25, 1.0")
         coords_lbl.add_css_class("monospace")
+        coords_lbl.add_css_class("dim-label")
         coords_lbl.set_selectable(True)
         self._coords_lbl = coords_lbl
-        right_box.append(coords_lbl)
+        edit_vbox.append(coords_lbl)
+        
+        card.append(edit_vbox)
+
+        # Presets side
+        presets_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        presets_vbox.set_margin_end(16)
+        presets_vbox.set_margin_top(16)
+        presets_vbox.set_margin_bottom(16)
+        presets_vbox.set_hexpand(True)
+
+        preset_title = Gtk.Label(label="Presets", xalign=0)
+        preset_title.add_css_class("heading")
+        presets_vbox.append(preset_title)
+
+        flow = Gtk.FlowBox()
+        flow.set_selection_mode(Gtk.SelectionMode.NONE)
+        flow.set_max_children_per_line(2)
+        flow.set_valign(Gtk.Align.START)
 
         for name, curve in PRESET_CURVES.items():
             btn = Gtk.Button(label=name)
             btn.add_css_class("flat")
             btn.add_css_class("pill")
             btn.connect("clicked", lambda b, c=curve, n=name: self._apply_preset(c, n))
-            right_box.append(btn)
+            flow.append(btn)
 
-        bezier_box.append(right_box)
-        bezier_grp.add(bezier_box)
+        presets_vbox.append(flow)
+        card.append(presets_vbox)
+
+        bezier_grp.add(card)
         content.append(bezier_grp)
 
         # Per-animation rows
+        anim_list_grp = Adw.PreferencesGroup(title="Animation Categories")
         for anim_key, anim_label in ANIM_NAMES:
-            grp = self._build_anim_row(anim_key, anim_label, anim_node)
-            content.append(grp)
+            row = self._build_anim_row(anim_key, anim_label, anim_node)
+            anim_list_grp.add(row)
+        content.append(anim_list_grp)
 
         return tb
 
@@ -285,8 +309,9 @@ class AnimationsPage(BasePage):
 
     def _build_anim_row(
         self, key: str, label: str, anim_node: KdlNode
-    ) -> Adw.PreferencesGroup:
-        grp = Adw.PreferencesGroup(title=label)
+    ) -> Adw.ExpanderRow:
+        grp = Adw.ExpanderRow(title=label)
+        grp.add_css_class("nm-expander")
         an = anim_node.get_child(key)
 
         enabled_row = Adw.SwitchRow(title="Enabled")
@@ -295,7 +320,7 @@ class AnimationsPage(BasePage):
             "notify::active",
             lambda r, _, k=key: self._set_anim_enabled(k, r.get_active()),
         )
-        grp.add(enabled_row)
+        grp.add_row(enabled_row)
 
         duration = an.child_arg("duration-ms") if an else 250
         dur_val = int(duration) if duration else 250
@@ -311,15 +336,25 @@ class AnimationsPage(BasePage):
                 self._set_anim_prop(k, "duration-ms", new_val)
 
         dur_row.connect("notify::value", _on_dur_changed)
-        grp.add(dur_row)
+        grp.add_row(dur_row)
 
         # Apply bezier button
         apply_btn = Gtk.Button(label="Apply Editor Curve")
         apply_btn.add_css_class("flat")
-        apply_btn.connect("clicked", lambda *_, k=key: self._apply_bezier_to_anim(k))
-        apply_row = Adw.ActionRow(title="Easing Curve")
+        apply_btn.set_valign(Gtk.Align.CENTER)
+        
+        # Determine current curve for subtitle
+        easing = an.get_child("easing") if an else None
+        current_curve = ""
+        if easing and easing.child_arg("bezier"):
+            current_curve = f"bezier {easing.child_arg('bezier')}"
+        elif easing and easing.args:
+            current_curve = str(easing.args[0])
+            
+        apply_row = Adw.ActionRow(title="Easing Curve", subtitle=current_curve if current_curve else "Default")
+        apply_btn.connect("clicked", lambda *_, k=key, ar=apply_row: self._apply_bezier_to_anim(k, ar))
         apply_row.add_suffix(apply_btn)
-        grp.add(apply_row)
+        grp.add_row(apply_row)
 
         return grp
 
@@ -357,7 +392,7 @@ class AnimationsPage(BasePage):
         set_child_arg(an, prop, value)
         self._commit(f"animation {anim_key} {prop}")
 
-    def _apply_bezier_to_anim(self, anim_key: str):
+    def _apply_bezier_to_anim(self, anim_key: str, apply_row: Adw.ActionRow = None):
         x1, y1, x2, y2 = self._bezier_editor.get_curve()
         anim = find_or_create(self._nodes, "animations")
         an = anim.get_child(anim_key)
@@ -368,6 +403,11 @@ class AnimationsPage(BasePage):
         if easing is None:
             easing = KdlNode("easing")
             an.children.append(easing)
-        set_child_arg(easing, "bezier", f"{x1:.3f} {y1:.3f} {x2:.3f} {y2:.3f}")
+            
+        curve_str = f"{x1:.3f} {y1:.3f} {x2:.3f} {y2:.3f}"
+        set_child_arg(easing, "bezier", curve_str)
         self._commit(f"animation {anim_key} bezier")
         self.show_toast(f"Bezier applied to {anim_key}")
+        
+        if apply_row:
+            apply_row.set_subtitle(f"bezier {curve_str}")
