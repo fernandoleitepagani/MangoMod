@@ -1,4 +1,4 @@
-"""Simple undo/redo stack for NiriMod."""
+
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from dataclasses import dataclass
 @dataclass
 class UndoEntry:
     description: str
-    snapshot_before: str  # raw KDL text
+    snapshot_before: str
     snapshot_after: str
 
 
@@ -23,6 +23,18 @@ class UndoManager:
         if len(self._stack) > self._max:
             self._stack.pop(0)
         self._redo_stack.clear()
+
+    @property
+    def last_snapshot(self) -> str | None:
+        if self._stack:
+            return self._stack[-1].snapshot_after
+        return None
+
+    @property
+    def last_description(self) -> str | None:
+        if self._stack:
+            return self._stack[-1].description
+        return None
 
     def pop_undo(self) -> UndoEntry | None:
         if not self._stack:
