@@ -29,7 +29,7 @@ CLICK_METHODS = ["button-areas", "clickfinger"]
 
 class MousePage(BasePage):
     def build(self) -> Gtk.Widget:
-        tb, _, _, content = make_toolbar_page("Mouse & Touchpad")
+        tb, _, _, content = self._make_toolbar_page("Mouse & Touchpad")
         self._content = content
         self._build_content()
         return tb
