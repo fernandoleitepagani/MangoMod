@@ -181,38 +181,83 @@ class BindingsPage(BasePage):
         self._viz: KeyboardVisualizer | None = None
 
     def build(self) -> Gtk.Widget:
-        tb, header, _, content = make_toolbar_page("Key Bindings")
+        # Create a custom ToolbarView layout to match "Workspace View" aesthetic
+        tb = Adw.ToolbarView()
 
-        # View switcher in header
+        # Custom Header
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        header_box.set_margin_start(24)
+        header_box.set_margin_end(24)
+        header_box.set_margin_top(20)
+        header_box.set_margin_bottom(12)
+
+        # Title/Subtitle Group
+        title_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        title_vbox.set_hexpand(True)
+        
+        self._main_title = Gtk.Label(label="Keybindings")
+        self._main_title.set_xalign(0.0)
+        self._main_title.add_css_class("title-1")
+        title_vbox.append(self._main_title)
+
+        self._kb_stats_header = Gtk.Label(label="Detecting bindings...")
+        self._kb_stats_header.set_xalign(0.0)
+        self._kb_stats_header.add_css_class("dim-label")
+        self._kb_stats_header.add_css_class("caption")
+        title_vbox.append(self._kb_stats_header)
+        header_box.append(title_vbox)
+
+        # Add Button (hidden by default, shown on List tab)
+        self._add_btn = Gtk.Button(icon_name="list-add-symbolic")
+        self._add_btn.set_tooltip_text("Add binding")
+        self._add_btn.add_css_class("flat")
+        self._add_btn.add_css_class("circular")
+        self._add_btn.set_visible(False)
+        self._add_btn.connect("clicked", self._on_add_clicked)
+        header_box.append(self._add_btn)
+
+        # View Switcher (Styled as Physical/List View buttons)
         self._view_stack = Adw.ViewStack()
-
-        switcher = Adw.ViewSwitcher()
-        switcher.set_stack(self._view_stack)
-        switcher.set_policy(Adw.ViewSwitcherPolicy.WIDE)
-        header.set_title_widget(switcher)
+        
+        switcher_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        switcher_box.add_css_class("linked")
+        switcher_box.set_valign(Gtk.Align.START)
+        
+        self._btn_physical = Gtk.ToggleButton(label="Physical")
+        self._btn_list = Gtk.ToggleButton(label="List View")
+        self._btn_list.set_group(self._btn_physical)
+        
+        self._btn_physical.connect("toggled", self._on_view_toggle)
+        self._btn_list.connect("toggled", self._on_view_toggle)
+        
+        switcher_box.append(self._btn_physical)
+        switcher_box.append(self._btn_list)
+        header_box.append(switcher_box)
+        
+        tb.add_top_bar(header_box)
 
         list_page_widget = self._build_list_tab()
-        self._view_stack.add_titled_with_icon(
-            list_page_widget, "list", "Bindings List", "view-list-symbolic"
-        )
-
-        self._add_btn_in_header = self._add_btn
-        header.pack_end(self._add_btn_in_header)
+        self._view_stack.add_named(list_page_widget, "list")
 
         kb_page_widget = self._build_keyboard_tab()
-        self._view_stack.add_titled_with_icon(
-            kb_page_widget, "keyboard", "Keyboard Map", "input-keyboard-symbolic"
-        )
+        self._view_stack.add_named(kb_page_widget, "keyboard")
 
-        # Stack goes into the scrollable content area
-        # But we don't want it scrolled — replace content's child approach:
-        # Instead, put the ViewStack directly in the ToolbarView content
-        # (bypassing the inner scroll, since the keyboard tab manages its own scroll)
+        # Default to keyboard (Physical)
+        self._view_stack.set_visible_child_name("keyboard")
+        self._btn_physical.set_active(True)
+
         tb.set_content(self._view_stack)
 
         self.refresh()
         self._start_file_monitor()
         return tb
+
+    def _on_view_toggle(self, btn):
+        if not btn.get_active():
+            return
+        is_list = btn == self._btn_list
+        self._view_stack.set_visible_child_name("list" if is_list else "keyboard")
+        self._add_btn.set_visible(is_list)
 
     def _build_list_tab(self) -> Gtk.Widget:
         """Return the scrollable list editor widget (original UI)."""
@@ -227,22 +272,7 @@ class BindingsPage(BasePage):
         content.set_margin_bottom(32)
         scroll.set_child(content)
 
-        # Add button — we'll wire it via a header-bar button stashed on the page
-        self._add_btn = Gtk.Button(icon_name="list-add-symbolic")
-        self._add_btn.set_tooltip_text("Add binding")
-        self._add_btn.add_css_class("flat")
-        self._add_btn.connect("clicked", self._on_add_clicked)
-
-        # Hook into view stack page-change to show/hide the add button
-        self._view_stack.connect("notify::visible-child", self._on_tab_changed)
-        # We'll inject it into the headerbar from on_shown after build
-        self._header_ref = None  # set below
-        # Store reference to header so we can add the add-btn later
-        # (make_toolbar_page returns it; we get it via the ToolbarView's top bar)
-
-        # Attach add-btn to first page's visible state
-        # The simplest approach: always show in header, only enable on list tab
-        # We'll handle visibility in _on_tab_changed.
+        # Search
 
         # Search
         search = Gtk.SearchEntry(placeholder_text="Filter bindings…")
@@ -251,9 +281,16 @@ class BindingsPage(BasePage):
         search.connect("search-changed", self._on_filter_changed)
         content.append(search)
 
-        # Binds group
-        self._binds_grp = Adw.PreferencesGroup(title="Managed Bindings")
-        content.append(self._binds_grp)
+        # Binds Grid
+        self._flowbox = Gtk.FlowBox()
+        self._flowbox.set_valign(Gtk.Align.START)
+        self._flowbox.set_max_children_per_line(3)
+        self._flowbox.set_min_children_per_line(1)
+        self._flowbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        self._flowbox.set_column_spacing(16)
+        self._flowbox.set_row_spacing(16)
+        self._flowbox.set_homogeneous(True)
+        content.append(self._flowbox)
 
         self._list_content = content
         return scroll
@@ -277,16 +314,15 @@ class BindingsPage(BasePage):
         kb_search.connect("search-changed", self._on_kb_search_changed)
         outer.append(kb_search)
 
-        # Stats label
-        self._kb_stats = Gtk.Label(label="")
-        self._kb_stats.add_css_class("dim-label")
-        self._kb_stats.add_css_class("caption")
-        self._kb_stats.set_xalign(0.0)
-        outer.append(self._kb_stats)
+        # Search bar
+        self._kb_stats = Gtk.Label(label="") # kept for reference if needed, but we use header now
+        self._kb_stats.set_visible(False)
 
         # Keyboard visualizer
         self._viz = KeyboardVisualizer()
         self._viz.connect("key-selected", self._on_kb_key_selected)
+        self._viz.connect("edit-binding", self._on_kb_edit_binding)
+        self._viz.connect("add-binding", self._on_kb_add_binding)
         outer.append(self._viz)
 
         return scroll
@@ -317,116 +353,156 @@ class BindingsPage(BasePage):
         self._viz.set_search(self._kb_search_query)
         n_bound = len(binds_map)
         n_total = len(self._binds)
-        self._kb_stats.set_label(
-            f"{n_total} total bindings · {n_bound} unique keys bound"
+        self._kb_stats_header.set_label(
+            f"{n_total} active bindings detected"
         )
 
     # List editor helpers (unchanged from original)
 
     def _rebuild_list(self):
-        box_parent = self._binds_grp.get_parent()
-        if box_parent is None:
+        if not hasattr(self, "_flowbox"):
             return
 
-        new_grp = Adw.PreferencesGroup(
-            title="Managed Bindings", description=f"{len(self._binds)} bindings"
-        )
+        # Clear existing children
+        while True:
+            child = self._flowbox.get_first_child()
+            if child is None:
+                break
+            self._flowbox.remove(child)
+
         q = self._search_query.lower()
+        visible_count = 0
         for i, b in enumerate(self._binds):
             if q and q not in b["keysym"].lower() and q not in b["action"].lower():
                 continue
-            row = self._make_bind_row(b, i)
-            new_grp.add(row)
+            card = self._make_bind_card(b, i)
+            self._flowbox.append(card)
+            visible_count += 1
 
-        idx = 0
-        child = box_parent.get_first_child()
-        while child:
-            if child is self._binds_grp:
-                break
-            idx += 1
-            child = child.get_next_sibling()
-        box_parent.remove(self._binds_grp)
-        box_parent.append(new_grp)
-        self._binds_grp = new_grp
-
-    def _make_bind_row(self, b: dict, idx: int) -> Adw.ActionRow:
+    def _make_bind_card(self, b: dict, idx: int) -> Gtk.Widget:
         keysym = b["keysym"]
         action = b["action"]
         action_args = b.get("action_args") or []
         action_arg_display = " ".join(str(a) for a in action_args)
 
-        full_action = f"{action}  {action_arg_display}".strip()
+        full_action = f"{action} {action_arg_display}".strip()
         if not full_action:
-            full_action = "(unassigned action)"
+            full_action = "(unassigned)"
 
-        # The row title is the action. The shortcut is the prefix.
-        row = Adw.ActionRow(title=GLib.markup_escape_text(full_action))
+        # Card container
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        card.set_size_request(240, 140)
+        card.add_css_class("nm-binding-card")
+        # Custom styling for the card
+        provider = Gtk.CssProvider()
+        provider.load_from_data(
+            b".nm-binding-card { "
+            b"  background: rgba(30, 30, 35, 0.6); "
+            b"  border: 1px solid rgba(255, 255, 255, 0.08); "
+            b"  border-radius: 12px; "
+            b"  padding: 16px; "
+            b"  transition: all 200ms ease; "
+            b"} "
+            b".nm-binding-card:hover { "
+            b"  background: rgba(45, 45, 50, 0.8); "
+            b"  border-color: rgba(147, 51, 234, 0.4); "
+            b"}"
+            b".nm-binding-actions-label { "
+            b"  color: rgba(255, 255, 255, 0.4); "
+            b"  font-weight: 800; "
+            b"  letter-spacing: 0.05em; "
+            b"  font-size: 0.7rem; "
+            b"} "
+            b".nm-binding-action-name { "
+            b"  color: rgba(192, 132, 252, 1.0); "
+            b"  font-weight: 600; "
+            b"  font-size: 1.0rem; "
+            b"} "
+            b".nm-keycap-purple { "
+            b"  background: #581c87; "
+            b"  color: white; "
+            b"  border-radius: 6px; "
+            b"  padding: 2px 8px; "
+            b"  font-weight: bold; "
+            b"  font-size: 0.8rem; "
+            b"}"
+        )
+        card.get_style_context().add_provider(provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
-        # Elegant Keycap Prefix
+        # 1. Keycaps Row
         keys_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        keys_box.set_valign(Gtk.Align.CENTER)
-        keys_box.set_margin_start(4)
-        keys_box.set_margin_end(16)
-
         parts = keysym.split("+")
         _labels = {
-            "mod": "Mod",
-            "super": "Super",
-            "ctrl": "Ctrl",
-            "control": "Ctrl",
-            "shift": "Shift",
-            "alt": "Alt",
-            "win": "Win",
+            "mod": "MOD",
+            "super": "SUP",
+            "ctrl": "CTL",
+            "control": "CTL",
+            "shift": "SHFT",
+            "alt": "ALT",
         }
 
         for i, part in enumerate(parts):
             label_text = part
             is_mod = i < len(parts) - 1
             if is_mod:
-                label_text = _labels.get(part.lower(), part)
+                label_text = _labels.get(part.lower(), part.upper()[:4])
             else:
                 label_text = label_text.upper() if len(label_text) == 1 else label_text
 
             cap = Gtk.Label(label=label_text)
-            if is_mod:
-                cap.add_css_class("nm-keycap-mod")
-            else:
-                cap.add_css_class("nm-keycap-main")
+            cap.add_css_class("nm-keycap-purple")
             keys_box.append(cap)
+            
+            if i < len(parts) - 1:
+                plus = Gtk.Label(label="+")
+                plus.add_css_class("dim-label")
+                keys_box.append(plus)
 
-        row.add_prefix(keys_box)
+        card.append(keys_box)
 
-        # Clean Suffix Buttons
-        actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        actions_box.set_valign(Gtk.Align.CENTER)
-        actions_box.set_margin_start(16)
+        # 2. "ACTIONS" Label
+        actions_header = Gtk.Label(label="ACTIONS")
+        actions_header.set_xalign(0.0)
+        actions_header.add_css_class("nm-binding-actions-label")
+        actions_header.set_margin_top(12)
+        card.append(actions_header)
 
-        if b["allow_when_locked"]:
-            lock_badge = Gtk.Label(label="🔒")
-            lock_badge.set_tooltip_text("Allowed when locked")
-            lock_badge.set_valign(Gtk.Align.CENTER)
-            actions_box.append(lock_badge)
+        # 3. Action Name
+        action_lbl = Gtk.Label(label=full_action)
+        action_lbl.set_xalign(0.0)
+        action_lbl.set_ellipsize(3) # pango.EllipsizeMode.END
+        action_lbl.add_css_class("nm-binding-action-name")
+        card.append(action_lbl)
+
+        # Spacer to push action buttons to the bottom
+        spacer = Gtk.Box()
+        spacer.set_vexpand(True)
+        card.append(spacer)
+
+        bottom_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        bottom_row.set_halign(Gtk.Align.END)
+
+        if b.get("allow_when_locked"):
+            lock = Gtk.Label(label="🔒")
+            lock.set_opacity(0.6)
+            bottom_row.append(lock)
 
         edit_btn = Gtk.Button(icon_name="document-edit-symbolic")
-        edit_btn.set_valign(Gtk.Align.CENTER)
-        edit_btn.add_css_class("circular")
         edit_btn.add_css_class("flat")
-        edit_btn.set_tooltip_text("Edit Binding")
+        edit_btn.add_css_class("circular")
         edit_btn.connect("clicked", lambda *_, i=idx: self._on_edit_clicked(i))
-        actions_box.append(edit_btn)
+        bottom_row.append(edit_btn)
 
         del_btn = Gtk.Button(icon_name="user-trash-symbolic")
-        del_btn.set_valign(Gtk.Align.CENTER)
-        del_btn.add_css_class("circular")
         del_btn.add_css_class("flat")
+        del_btn.add_css_class("circular")
         del_btn.add_css_class("error")
-        del_btn.set_tooltip_text("Delete Binding")
         del_btn.connect("clicked", lambda *_, i=idx: self._on_delete_clicked(i))
-        actions_box.append(del_btn)
+        bottom_row.append(del_btn)
 
-        row.add_suffix(actions_box)
+        card.append(bottom_row)
 
-        return row
+        return card
 
     def _on_filter_changed(self, entry):
         self._search_query = entry.get_text().strip()
@@ -441,6 +517,32 @@ class BindingsPage(BasePage):
         # The visualizer's action panel already updates itself;
         # we can optionally jump to the list tab and highlight the binding.
         pass
+
+    def _on_kb_edit_binding(self, viz, bind_dict):
+        try:
+            # Locate the actual bind in our list
+            idx = self._binds.index(bind_dict)
+            self._show_bind_dialog(bind_dict, idx)
+        except ValueError:
+            pass
+
+    def _on_kb_add_binding(self, viz, key_id: str):
+        # Create a new empty bind pre-filled with the selected key
+        # We try to make it look like a valid keysym (e.g. "T" instead of "t")
+        if len(key_id) == 1:
+            key_id = key_id.upper()
+        else:
+            key_id = key_id.capitalize()
+            
+        new_bind = {
+            "keysym": key_id,
+            "action": "",
+            "action_args": [],
+            "allow_when_locked": False,
+            "repeat": True,
+            "extra_props": {}
+        }
+        self._show_bind_dialog(new_bind, -1)
 
     def _on_delete_clicked(self, idx: int):
         if 0 <= idx < len(self._binds):
