@@ -1,54 +1,120 @@
-"""Window Rules page."""
+"""Window Rules page — redesigned for usability."""
 
 from __future__ import annotations
-
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gtk, GLib
+from gi.repository import Adw, Gtk, GLib, Pango
 
-from nirimod.kdl_parser import KdlNode
+from nirimod.kdl_parser import KdlNode, KdlRawString
 from nirimod.pages.base import BasePage, make_toolbar_page
 
 
-BOOL_MATCH_FIELDS = ["is-active", "is-floating", "is-focused", "at-startup"]
-STR_MATCH_FIELDS = ["app-id", "title"]
-BOOL_ACTIONS = [
-    "open-maximized",
-    "open-fullscreen",
-    "open-floating",
-    "block-out-from-screencast",
-    "draw-border-with-background",
-    "clip-to-geometry",
-]
-NUM_ACTIONS = [
-    "opacity",
-    "geometry-corner-radius",
-    "min-width",
-    "min-height",
-    "max-width",
-    "max-height",
-    "default-window-height",
-]
-STR_ACTIONS = ["open-on-workspace", "open-on-output", "default-column-width"]
+# ── Human-readable labels ────────────────────────────────────────────────────
 
+BOOL_MATCH_LABELS = {
+    "is-active": "Is Active",
+    "is-floating": "Is Floating",
+    "is-focused": "Is Focused",
+    "at-startup": "At Startup",
+}
+
+BOOL_ACTION_LABELS = {
+    "open-maximized": "Open Maximized",
+    "open-fullscreen": "Open Fullscreen",
+    "open-floating": "Open Floating",
+    "block-out-from-screencast": "Block from Screencast",
+    "draw-border-with-background": "Draw Border with Background",
+    "clip-to-geometry": "Clip to Geometry",
+    "prefer-no-csd": "Prefer No CSD",
+}
+
+NUM_ACTION_LABELS = {
+    "opacity": ("Opacity", 0.0, 1.0, 0.05, 2),
+    "geometry-corner-radius": ("Corner Radius (px)", 0, 40, 1, 0),
+    "min-width": ("Min Width (px)", 0, 7680, 1, 0),
+    "min-height": ("Min Height (px)", 0, 7680, 1, 0),
+    "max-width": ("Max Width (px)", 0, 7680, 1, 0),
+    "max-height": ("Max Height (px)", 0, 7680, 1, 0),
+    "default-window-height": ("Default Window Height (px)", 0, 7680, 1, 0),
+}
+
+STR_ACTION_LABELS = {
+    "open-on-workspace": "Open on Workspace",
+    "open-on-output": "Open on Output",
+    "default-column-width": "Default Column Width",
+}
+
+LAYER_BOOL_ACTION_LABELS = {
+    "place-within-backdrop": "Place Within Backdrop",
+    "block-out-from-screencast": "Block from Screencast",
+}
+
+
+def _rule_summary(rule: KdlNode) -> tuple[str, str]:
+    """Return (title, subtitle) for a window-rule row."""
+    matches = rule.get_children("match")
+    if not matches:
+        title = "Global Rule"
+    else:
+        parts = []
+        for m in matches:
+            for k, v in m.props.items():
+                parts.append(f"{k}: {v}")
+            for a in m.args:
+                parts.append(str(a))
+        title = "  •  ".join(parts) if parts else "(any)"
+
+    badges = []
+    for c in rule.children:
+        if c.name == "match":
+            continue
+        if c.name == "opacity" and c.args:
+            badges.append(f"opacity {c.args[0]}")
+        elif c.name == "background-effect":
+            badges.append("blur")
+        elif c.name == "open-floating":
+            badges.append("floating")
+        elif c.name == "open-maximized":
+            badges.append("maximized")
+        elif c.name == "open-fullscreen":
+            badges.append("fullscreen")
+        elif c.name in ("clip-to-geometry", "geometry-corner-radius"):
+            pass  # skip noisy ones
+        else:
+            badges.append(c.name.replace("-", " "))
+
+    subtitle = ",  ".join(badges[:5]) if badges else "no actions"
+    return GLib.markup_escape_text(title), GLib.markup_escape_text(subtitle)
+
+
+def _layer_rule_summary(rule: KdlNode) -> tuple[str, str]:
+    match_node = rule.get_child("match")
+    ns = str(match_node.props.get("namespace", "")) if match_node else ""
+    title = f"namespace: {ns}" if ns else "(any)"
+    actions = [c.name.replace("-", " ") for c in rule.children if c.name != "match"]
+    subtitle = ",  ".join(actions) if actions else "no actions"
+    return GLib.markup_escape_text(title), GLib.markup_escape_text(subtitle)
+
+
+# ── Page ─────────────────────────────────────────────────────────────────────
 
 class WindowRulesPage(BasePage):
     def build(self) -> Gtk.Widget:
-        tb, header, _, content = make_toolbar_page("Window Rules")
+        tb, header, _, content = self._make_toolbar_page("Window Rules")
         self._content = content
 
-        add_btn = Gtk.Button(icon_name="list-add-symbolic")
-        add_btn.add_css_class("flat")
-        add_btn.set_tooltip_text("Add rule")
-        add_btn.connect("clicked", self._on_add)
-        header.pack_end(add_btn)
+        add_win_btn = Gtk.Button(label="Add Window Rule")
+        add_win_btn.add_css_class("flat")
+        add_win_btn.set_tooltip_text("Add a new window rule")
+        add_win_btn.connect("clicked", self._on_add)
+        header.pack_end(add_win_btn)
 
-        add_layer_btn = Gtk.Button(icon_name="list-add-symbolic")
+        add_layer_btn = Gtk.Button(label="Add Layer Rule")
         add_layer_btn.add_css_class("flat")
-        add_layer_btn.set_tooltip_text("Add layer rule")
+        add_layer_btn.set_tooltip_text("Add a new layer-shell rule")
         add_layer_btn.connect("clicked", self._on_add_layer)
         header.pack_end(add_layer_btn)
 
@@ -57,7 +123,7 @@ class WindowRulesPage(BasePage):
 
         self._layer_rules_grp = Adw.PreferencesGroup(
             title="Layer Rules",
-            description="Rules for layer-shell surfaces (bars, overlays, etc.)",
+            description="Rules for layer-shell surfaces (bars, overlays, wallpapers…)",
         )
         content.append(self._layer_rules_grp)
 
@@ -68,138 +134,7 @@ class WindowRulesPage(BasePage):
         self._rebuild()
         self._rebuild_layer()
 
-    def _get_layer_rules(self) -> list[KdlNode]:
-        return [n for n in self._nodes if n.name == "layer-rule"]
-
-    def _rebuild_layer(self):
-        parent = self._layer_rules_grp.get_parent()
-        if parent is None:
-            return
-        rules = self._get_layer_rules()
-        new_grp = Adw.PreferencesGroup(
-            title="Layer Rules",
-            description=f"{len(rules)} layer rule(s) — for bars, overlays, etc.",
-        )
-        for i, rule in enumerate(rules):
-            row = self._make_layer_rule_row(rule, i)
-            new_grp.add(row)
-        parent.remove(self._layer_rules_grp)
-        parent.append(new_grp)
-        self._layer_rules_grp = new_grp
-
-    def _make_layer_rule_row(self, rule: KdlNode, idx: int) -> Adw.ActionRow:
-        match_node = rule.get_child("match")
-        ns = match_node.props.get("namespace", "") if match_node else ""
-        actions = [c.name for c in rule.children if c.name != "match"]
-        row = Adw.ActionRow(
-            title=GLib.markup_escape_text(f"namespace={ns}" if ns else "(any)"),
-            subtitle=GLib.markup_escape_text(", ".join(actions[:4])),
-        )
-        del_btn = Gtk.Button(icon_name="user-trash-symbolic")
-        del_btn.set_valign(Gtk.Align.CENTER)
-        del_btn.add_css_class("flat")
-        del_btn.add_css_class("error")
-        del_btn.connect("clicked", lambda *_, i=idx: self._on_delete_layer(i))
-        row.add_suffix(del_btn)
-        return row
-
-    def _on_add_layer(self, *_):
-        self._show_layer_dialog(None, -1)
-
-    def _on_delete_layer(self, idx: int):
-        rules = self._get_layer_rules()
-        if 0 <= idx < len(rules):
-            self._nodes.remove(rules[idx])
-            self._commit("remove layer rule")
-            self._rebuild_layer()
-
-    def _show_layer_dialog(self, rule: KdlNode | None, idx: int):
-        LAYER_BOOL_ACTIONS = [
-            "place-within-backdrop",
-            "block-out-from-screencast",
-        ]
-        dialog = Adw.Dialog(title="Layer Rule")
-        dialog.set_content_width(440)
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        hdr = Adw.HeaderBar()
-        hdr.set_title_widget(Adw.WindowTitle(title="Layer Rule"))
-        box.append(hdr)
-
-        prefs = Adw.PreferencesPage()
-        prefs.set_vexpand(True)
-
-        match_grp = Adw.PreferencesGroup(title="Match")
-        match_node = rule.get_child("match") if rule else None
-        ns_entry = Adw.EntryRow(title="Namespace (regex, e.g. ^waybar$)")
-        ns_entry.set_text(
-            str(match_node.props.get("namespace", "")) if match_node else ""
-        )
-        match_grp.add(ns_entry)
-        prefs.add(match_grp)
-
-        act_grp = Adw.PreferencesGroup(title="Actions")
-        bool_rows: dict[str, Adw.SwitchRow] = {}
-        for a in LAYER_BOOL_ACTIONS:
-            sr = Adw.SwitchRow(title=a)
-            sr.set_active(rule.get_child(a) is not None if rule else False)
-            act_grp.add(sr)
-            bool_rows[a] = sr
-
-        opacity_adj = Gtk.Adjustment(
-            value=1.0, lower=0.0, upper=1.0, step_increment=0.05
-        )
-        if rule:
-            op_node = rule.get_child("opacity")
-            if op_node and op_node.args:
-                opacity_adj.set_value(float(op_node.args[0]))
-        opacity_row = Adw.SpinRow(title="Opacity", adjustment=opacity_adj, digits=2)
-        act_grp.add(opacity_row)
-        prefs.add(act_grp)
-        box.append(prefs)
-
-        save_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        save_box.set_halign(Gtk.Align.END)
-        save_box.set_margin_start(16)
-        save_box.set_margin_end(16)
-        save_box.set_margin_bottom(16)
-        save_btn = Gtk.Button(label="Save Rule")
-        save_btn.add_css_class("suggested-action")
-        save_btn.add_css_class("pill")
-
-        def _save(*_):
-            new_rule = KdlNode("layer-rule")
-            ns = ns_entry.get_text().strip()
-            if ns:
-                from nirimod.kdl_parser import KdlRawString
-
-                m = KdlNode("match")
-                m.props["namespace"] = KdlRawString(ns)
-                new_rule.children.append(m)
-            for a, sr in bool_rows.items():
-                if sr.get_active():
-                    cn = KdlNode(a)
-                    cn.args = [True]
-                    new_rule.children.append(cn)
-            op_val = opacity_row.get_value()
-            if op_val < 1.0:
-                op_node = KdlNode("opacity")
-                op_node.args = [round(op_val, 2)]
-                new_rule.children.append(op_node)
-            rules = self._get_layer_rules()
-            if idx >= 0 and 0 <= idx < len(rules):
-                i = self._nodes.index(rules[idx])
-                self._nodes[i] = new_rule
-            else:
-                self._nodes.append(new_rule)
-            self._commit("layer rule")
-            self._rebuild_layer()
-            dialog.close()
-
-        save_btn.connect("clicked", _save)
-        save_box.append(save_btn)
-        box.append(save_box)
-        dialog.set_child(box)
-        dialog.present(self._win)
+    # ── Window rules ─────────────────────────────────────────────────────────
 
     def _get_rules(self) -> list[KdlNode]:
         return [n for n in self._nodes if n.name == "window-rule"]
@@ -210,49 +145,46 @@ class WindowRulesPage(BasePage):
             return
         rules = self._get_rules()
         new_grp = Adw.PreferencesGroup(
-            title="Window Rules", description=f"{len(rules)} window rule(s)"
+            title="Window Rules",
+            description=f"{len(rules)} rule(s) — click a row to edit",
         )
         for i, rule in enumerate(rules):
-            row = self._make_rule_row(rule, i)
-            new_grp.add(row)
+            new_grp.add(self._make_rule_row(rule, i))
         parent.remove(self._rules_grp)
         parent.append(new_grp)
         self._rules_grp = new_grp
 
     def _make_rule_row(self, rule: KdlNode, idx: int) -> Adw.ActionRow:
+        title, subtitle = _rule_summary(rule)
+        row = Adw.ActionRow(title=title, subtitle=subtitle)
+        row.set_activatable(True)
+        row.set_subtitle_lines(1)
+        row.add_css_class("monospace")
 
-        matches = []
-        for c in rule.children:
-            if c.name == "match":
-                parts = []
-                for k, v in c.props.items():
-                    parts.append(f"{k}={v}")
-                for a in c.args:
-                    parts.append(str(a))
-                matches.append(" ".join(parts))
-        match_str = ", ".join(matches) if matches else "(global)"
-
-        actions = [c.name for c in rule.children if c.name != "match"]
-        action_str = ", ".join(actions[:4])
-
-        row = Adw.ActionRow(
-            title=GLib.markup_escape_text(match_str),
-            subtitle=GLib.markup_escape_text(action_str),
-        )
-
-        edit_btn = Gtk.Button(icon_name="document-edit-symbolic")
-        edit_btn.set_valign(Gtk.Align.CENTER)
-        edit_btn.add_css_class("flat")
-        edit_btn.connect("clicked", lambda *_, i=idx: self._on_edit(i))
-        row.add_suffix(edit_btn)
+        # visual badge for blur / opacity
+        has_blur = rule.get_child("background-effect") is not None
+        op_node = rule.get_child("opacity")
+        if has_blur:
+            lbl = Gtk.Label(label="blur")
+            lbl.add_css_class("tag")
+            lbl.add_css_class("accent")
+            lbl.set_valign(Gtk.Align.CENTER)
+            row.add_suffix(lbl)
+        if op_node and op_node.args:
+            lbl2 = Gtk.Label(label=f"α {op_node.args[0]}")
+            lbl2.add_css_class("tag")
+            lbl2.set_valign(Gtk.Align.CENTER)
+            row.add_suffix(lbl2)
 
         del_btn = Gtk.Button(icon_name="user-trash-symbolic")
         del_btn.set_valign(Gtk.Align.CENTER)
         del_btn.add_css_class("flat")
         del_btn.add_css_class("error")
+        del_btn.set_tooltip_text("Delete rule")
         del_btn.connect("clicked", lambda *_, i=idx: self._on_delete(i))
         row.add_suffix(del_btn)
 
+        row.connect("activated", lambda *_, i=idx: self._on_edit(i))
         return row
 
     def _on_add(self, *_):
@@ -265,132 +197,216 @@ class WindowRulesPage(BasePage):
 
     def _on_delete(self, idx: int):
         rules = self._get_rules()
-        if 0 <= idx < len(rules):
-            self._nodes.remove(rules[idx])
-            self._commit("remove window rule")
-            self._rebuild()
+        if not (0 <= idx < len(rules)):
+            return
+        removed = rules[idx]
+        self._nodes.remove(removed)
+        self._commit("remove window rule")
+        self._rebuild()
+
+        # show a quick-undo toast
+        t = Adw.Toast(title="Window rule deleted", button_label="Undo", timeout=5)
+        t.connect("button-clicked", lambda *_: self._win._do_undo())
+        self._win._toast_overlay.add_toast(t)
 
     def _show_rule_dialog(self, rule: KdlNode | None, rule_idx: int):
         dialog = Adw.Dialog(title="Window Rule")
-        dialog.set_content_width(500)
+        dialog.set_content_width(520)
+        dialog.set_content_height(680)
 
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        toolbar_view = Adw.ToolbarView()
         hdr = Adw.HeaderBar()
-        hdr.set_title_widget(Adw.WindowTitle(title="Window Rule"))
-        box.append(hdr)
+        title_lbl = "Edit Window Rule" if rule else "New Window Rule"
+        hdr.set_title_widget(Adw.WindowTitle(title=title_lbl))
+        toolbar_view.add_top_bar(hdr)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
 
         prefs = Adw.PreferencesPage()
-        prefs.set_vexpand(True)
 
-        match_grp = Adw.PreferencesGroup(title="Match Criteria")
-        match_entries: dict[str, Adw.EntryRow] = {}
+        # ── Match criteria ────────────────────────────────────────────────
+        match_grp = Adw.PreferencesGroup(
+            title="Match Criteria",
+            description="Leave fields empty to match any window",
+        )
         match_node = rule.get_child("match") if rule else None
 
-        for field in STR_MATCH_FIELDS:
-            e = Adw.EntryRow(title=field)
-            val = match_node.props.get(field, "") if match_node else ""
-            e.set_text(str(val))
-            match_grp.add(e)
-            match_entries[field] = e
+        app_id_row = Adw.EntryRow(title="App ID (regex, e.g. ^kitty$)")
+        app_id_row.set_text(str(match_node.props.get("app-id", "")) if match_node else "")
+        match_grp.add(app_id_row)
 
-        match_bool_rows: dict[str, Adw.SwitchRow] = {}
-        for field in BOOL_MATCH_FIELDS:
-            sr = Adw.SwitchRow(title=field)
-            val = match_node.props.get(field, False) if match_node else False
+        title_row = Adw.EntryRow(title="Window Title (regex)")
+        title_row.set_text(str(match_node.props.get("title", "")) if match_node else "")
+        match_grp.add(title_row)
+
+        bool_match_rows: dict[str, Adw.SwitchRow] = {}
+        for key, label in BOOL_MATCH_LABELS.items():
+            sr = Adw.SwitchRow(title=label)
+            val = match_node.props.get(key, False) if match_node else False
             sr.set_active(bool(val))
             match_grp.add(sr)
-            match_bool_rows[field] = sr
+            bool_match_rows[key] = sr
+
         prefs.add(match_grp)
 
-        act_grp = Adw.PreferencesGroup(title="Actions")
-        bool_rows: dict[str, Adw.SwitchRow] = {}
-        for a in BOOL_ACTIONS:
-            sr = Adw.SwitchRow(title=a)
-            sr.set_active(rule.get_child(a) is not None if rule else False)
-            act_grp.add(sr)
-            bool_rows[a] = sr
+        # ── Visibility & layout ───────────────────────────────────────────
+        layout_grp = Adw.PreferencesGroup(title="Layout & Visibility")
 
+        bool_rows: dict[str, Adw.SwitchRow] = {}
+        for key, label in BOOL_ACTION_LABELS.items():
+            sr = Adw.SwitchRow(title=label)
+            sr.set_active(rule.get_child(key) is not None if rule else False)
+            layout_grp.add(sr)
+            bool_rows[key] = sr
+
+        prefs.add(layout_grp)
+
+        # ── Visual effects ────────────────────────────────────────────────
+        fx_grp = Adw.PreferencesGroup(title="Visual Effects")
+
+        op_val = 0.0
+        if rule:
+            op_node = rule.get_child("opacity")
+            if op_node and op_node.args:
+                op_val = float(op_node.args[0])
+        op_adj = Gtk.Adjustment(value=op_val, lower=0.0, upper=1.0, step_increment=0.05)
+        op_row = Adw.SpinRow(title="Opacity (0 = unset, 1 = fully opaque)", adjustment=op_adj, digits=2)
+        fx_grp.add(op_row)
+
+        blur_row = Adw.SwitchRow(
+            title="Background Blur",
+            subtitle="Adds background-effect { blur true }",
+        )
+        has_blur = False
+        if rule:
+            be = rule.get_child("background-effect")
+            if be is not None:
+                blur_child = be.get_child("blur")
+                has_blur = blur_child is not None and (not blur_child.args or blur_child.args[0] is True)
+        blur_row.set_active(has_blur)
+        fx_grp.add(blur_row)
+
+        prefs.add(fx_grp)
+
+        # ── Numeric dimensions ────────────────────────────────────────────
+        dim_grp = Adw.PreferencesGroup(title="Dimensions (0 = unset)")
         num_rows: dict[str, Adw.SpinRow] = {}
-        for a in NUM_ACTIONS:
-            max_v = 1.0 if a == "opacity" else 7680
-            step = 0.05 if a == "opacity" else 1
-            digits = 2 if a == "opacity" else 0
+        for key, (label, lo, hi, step, digits) in NUM_ACTION_LABELS.items():
+            if key == "opacity":
+                continue  # handled above
             cur = 0
             if rule:
-                cn = rule.get_child(a)
+                cn = rule.get_child(key)
                 cur = cn.args[0] if cn and cn.args else 0
-            adj = Gtk.Adjustment(
-                value=float(cur), lower=0, upper=max_v, step_increment=step
-            )
-            sr = Adw.SpinRow(title=a, adjustment=adj, digits=digits)
-            act_grp.add(sr)
-            num_rows[a] = sr
+            adj = Gtk.Adjustment(value=float(cur), lower=lo, upper=hi, step_increment=step)
+            sr = Adw.SpinRow(title=label, adjustment=adj, digits=digits)
+            dim_grp.add(sr)
+            num_rows[key] = sr
 
+        prefs.add(dim_grp)
+
+        # ── Workspace / output ────────────────────────────────────────────
+        place_grp = Adw.PreferencesGroup(title="Placement")
         str_rows: dict[str, Adw.EntryRow] = {}
-        for a in STR_ACTIONS:
-            e = Adw.EntryRow(title=a)
+        for key, label in STR_ACTION_LABELS.items():
+            e = Adw.EntryRow(title=label)
             if rule:
-                cn = rule.get_child(a)
+                cn = rule.get_child(key)
                 e.set_text(str(cn.args[0]) if cn and cn.args else "")
-            act_grp.add(e)
-            str_rows[a] = e
+            place_grp.add(e)
+            str_rows[key] = e
 
-        prefs.add(act_grp)
-        box.append(prefs)
+        prefs.add(place_grp)
 
-        save_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        save_box.set_halign(Gtk.Align.END)
-        save_box.set_margin_start(16)
-        save_box.set_margin_end(16)
-        save_box.set_margin_bottom(16)
+        scroll.set_child(prefs)
+        toolbar_view.set_content(scroll)
+
+        # ── Save button ───────────────────────────────────────────────────
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_box.set_margin_start(16)
+        btn_box.set_margin_end(16)
+        btn_box.set_margin_top(8)
+        btn_box.set_margin_bottom(16)
+
+        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn.add_css_class("pill")
+        cancel_btn.connect("clicked", lambda *_: dialog.close())
+        btn_box.append(cancel_btn)
+
         save_btn = Gtk.Button(label="Save Rule")
         save_btn.add_css_class("suggested-action")
         save_btn.add_css_class("pill")
+        btn_box.append(save_btn)
+
+        toolbar_view.add_bottom_bar(btn_box)
 
         def _save(*_):
             new_rule = KdlNode("window-rule")
+            new_rule.leading_trivia = "\n"
 
-            match_node_new = KdlNode("match")
+            # match node
+            m = KdlNode("match")
             has_match = False
-            for f, e in match_entries.items():
-                v = e.get_text().strip()
-                if v:
-                    from nirimod.kdl_parser import KdlRawString
-
-                    match_node_new.props[f] = KdlRawString(v)
-                    has_match = True
-            for f, sr in match_bool_rows.items():
+            app_id_text = app_id_row.get_text().strip()
+            if app_id_text:
+                m.props["app-id"] = KdlRawString(app_id_text)
+                has_match = True
+            title_text = title_row.get_text().strip()
+            if title_text:
+                m.props["title"] = KdlRawString(title_text)
+                has_match = True
+            for key, sr in bool_match_rows.items():
                 if sr.get_active():
-                    match_node_new.props[f] = True
+                    m.props[key] = True
                     has_match = True
             if has_match:
-                new_rule.children.append(match_node_new)
+                new_rule.children.append(m)
 
-            for a, sr in bool_rows.items():
+            # bool actions
+            for key, sr in bool_rows.items():
                 if sr.get_active():
-                    cn = KdlNode(a)
-                    cn.args = [True]
+                    cn = KdlNode(key)
                     new_rule.children.append(cn)
 
-            for a, sr in num_rows.items():
+            # opacity
+            op = op_row.get_value()
+            if op > 0.0:
+                cn = KdlNode("opacity")
+                cn.args = [round(op, 2)]
+                new_rule.children.append(cn)
+
+            # blur
+            if blur_row.get_active():
+                be = KdlNode("background-effect")
+                blur_child = KdlNode("blur")
+                blur_child.args = [True]
+                be.children.append(blur_child)
+                new_rule.children.append(be)
+
+            # dimensions
+            for key, sr in num_rows.items():
                 v = sr.get_value()
                 if v > 0:
-                    cn = KdlNode(a)
-                    cn.args = [v if a == "opacity" else int(v)]
+                    cn = KdlNode(key)
+                    cn.args = [int(v)]
                     new_rule.children.append(cn)
 
-            for a, e in str_rows.items():
+            # placement strings
+            for key, e in str_rows.items():
                 v = e.get_text().strip()
                 if v:
-                    cn = KdlNode(a)
+                    cn = KdlNode(key)
                     cn.args = [v]
                     new_rule.children.append(cn)
 
             if rule_idx >= 0:
                 rules = self._get_rules()
                 if 0 <= rule_idx < len(rules):
-                    idx_in_nodes = self._nodes.index(rules[rule_idx])
-                    self._nodes[idx_in_nodes] = new_rule
+                    i = self._nodes.index(rules[rule_idx])
+                    self._nodes[i] = new_rule
             else:
                 self._nodes.append(new_rule)
 
@@ -399,8 +415,175 @@ class WindowRulesPage(BasePage):
             dialog.close()
 
         save_btn.connect("clicked", _save)
-        save_box.append(save_btn)
-        box.append(save_box)
+        dialog.set_child(toolbar_view)
+        dialog.present(self._win)
 
-        dialog.set_child(box)
+    # ── Layer rules ───────────────────────────────────────────────────────────
+
+    def _get_layer_rules(self) -> list[KdlNode]:
+        return [n for n in self._nodes if n.name == "layer-rule"]
+
+    def _rebuild_layer(self):
+        parent = self._layer_rules_grp.get_parent()
+        if parent is None:
+            return
+        rules = self._get_layer_rules()
+        new_grp = Adw.PreferencesGroup(
+            title="Layer Rules",
+            description=f"{len(rules)} rule(s) — bars, overlays, wallpapers",
+        )
+        for i, rule in enumerate(rules):
+            new_grp.add(self._make_layer_rule_row(rule, i))
+        parent.remove(self._layer_rules_grp)
+        parent.append(new_grp)
+        self._layer_rules_grp = new_grp
+
+    def _make_layer_rule_row(self, rule: KdlNode, idx: int) -> Adw.ActionRow:
+        title, subtitle = _layer_rule_summary(rule)
+        row = Adw.ActionRow(title=title, subtitle=subtitle)
+        row.set_activatable(True)
+        row.add_css_class("monospace")
+
+        has_blur = rule.get_child("background-effect") is not None
+        if has_blur:
+            lbl = Gtk.Label(label="blur")
+            lbl.add_css_class("tag")
+            lbl.add_css_class("accent")
+            lbl.set_valign(Gtk.Align.CENTER)
+            row.add_suffix(lbl)
+
+        del_btn = Gtk.Button(icon_name="user-trash-symbolic")
+        del_btn.set_valign(Gtk.Align.CENTER)
+        del_btn.add_css_class("flat")
+        del_btn.add_css_class("error")
+        del_btn.set_tooltip_text("Delete layer rule")
+        del_btn.connect("clicked", lambda *_, i=idx: self._on_delete_layer(i))
+        row.add_suffix(del_btn)
+
+        row.connect("activated", lambda *_, i=idx: self._on_edit_layer(i))
+        return row
+
+    def _on_add_layer(self, *_):
+        self._show_layer_dialog(None, -1)
+
+    def _on_edit_layer(self, idx: int):
+        rules = self._get_layer_rules()
+        if 0 <= idx < len(rules):
+            self._show_layer_dialog(rules[idx], idx)
+
+    def _on_delete_layer(self, idx: int):
+        rules = self._get_layer_rules()
+        if not (0 <= idx < len(rules)):
+            return
+        self._nodes.remove(rules[idx])
+        self._commit("remove layer rule")
+        self._rebuild_layer()
+
+        t = Adw.Toast(title="Layer rule deleted", button_label="Undo", timeout=5)
+        t.connect("button-clicked", lambda *_: self._win._do_undo())
+        self._win._toast_overlay.add_toast(t)
+
+    def _show_layer_dialog(self, rule: KdlNode | None, idx: int):
+        dialog = Adw.Dialog(title="Layer Rule")
+        dialog.set_content_width(460)
+
+        toolbar_view = Adw.ToolbarView()
+        hdr = Adw.HeaderBar()
+        hdr.set_title_widget(Adw.WindowTitle(title="Edit Layer Rule" if rule else "New Layer Rule"))
+        toolbar_view.add_top_bar(hdr)
+
+        prefs = Adw.PreferencesPage()
+
+        match_grp = Adw.PreferencesGroup(title="Match")
+        match_node = rule.get_child("match") if rule else None
+        ns_entry = Adw.EntryRow(title="Namespace (regex, e.g. ^waybar$)")
+        ns_entry.set_text(str(match_node.props.get("namespace", "")) if match_node else "")
+        match_grp.add(ns_entry)
+        prefs.add(match_grp)
+
+        act_grp = Adw.PreferencesGroup(title="Actions")
+        bool_rows: dict[str, Adw.SwitchRow] = {}
+        for key, label in LAYER_BOOL_ACTION_LABELS.items():
+            sr = Adw.SwitchRow(title=label)
+            sr.set_active(rule.get_child(key) is not None if rule else False)
+            act_grp.add(sr)
+            bool_rows[key] = sr
+
+        blur_row = Adw.SwitchRow(title="Background Blur")
+        has_blur = False
+        if rule:
+            be = rule.get_child("background-effect")
+            if be:
+                bc = be.get_child("blur")
+                has_blur = bc is not None and (not bc.args or bc.args[0] is True)
+        blur_row.set_active(has_blur)
+        act_grp.add(blur_row)
+
+        op_adj = Gtk.Adjustment(value=1.0, lower=0.0, upper=1.0, step_increment=0.05)
+        if rule:
+            op_node = rule.get_child("opacity")
+            if op_node and op_node.args:
+                op_adj.set_value(float(op_node.args[0]))
+        op_row = Adw.SpinRow(title="Opacity (1 = unset)", adjustment=op_adj, digits=2)
+        act_grp.add(op_row)
+
+        prefs.add(act_grp)
+        toolbar_view.set_content(prefs)
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_box.set_margin_start(16)
+        btn_box.set_margin_end(16)
+        btn_box.set_margin_top(8)
+        btn_box.set_margin_bottom(16)
+
+        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn.add_css_class("pill")
+        cancel_btn.connect("clicked", lambda *_: dialog.close())
+        btn_box.append(cancel_btn)
+
+        save_btn = Gtk.Button(label="Save Rule")
+        save_btn.add_css_class("suggested-action")
+        save_btn.add_css_class("pill")
+        btn_box.append(save_btn)
+
+        toolbar_view.add_bottom_bar(btn_box)
+
+        def _save(*_):
+            new_rule = KdlNode("layer-rule")
+            new_rule.leading_trivia = "\n"
+            ns = ns_entry.get_text().strip()
+            if ns:
+                m = KdlNode("match")
+                m.props["namespace"] = KdlRawString(ns)
+                new_rule.children.append(m)
+            for key, sr in bool_rows.items():
+                if sr.get_active():
+                    cn = KdlNode(key)
+                    cn.args = [True]
+                    new_rule.children.append(cn)
+            if blur_row.get_active():
+                be = KdlNode("background-effect")
+                bc = KdlNode("blur")
+                bc.args = [True]
+                be.children.append(bc)
+                new_rule.children.append(be)
+            op = op_row.get_value()
+            if op < 1.0:
+                op_node = KdlNode("opacity")
+                op_node.args = [round(op, 2)]
+                new_rule.children.append(op_node)
+
+            rules = self._get_layer_rules()
+            if idx >= 0 and 0 <= idx < len(rules):
+                i = self._nodes.index(rules[idx])
+                self._nodes[i] = new_rule
+            else:
+                self._nodes.append(new_rule)
+            self._commit("layer rule")
+            self._rebuild_layer()
+            dialog.close()
+
+        save_btn.connect("clicked", _save)
+        dialog.set_child(toolbar_view)
         dialog.present(self._win)
