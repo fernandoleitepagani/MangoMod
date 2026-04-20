@@ -41,7 +41,7 @@ class OutputsPage(BasePage):
         self._drag_offset: tuple[float, float] = (0, 0)
 
     def build(self) -> Gtk.Widget:
-        tb, header, scroll, content = make_toolbar_page("Outputs")
+        tb, header, scroll, content = self._make_toolbar_page("Outputs")
 
         refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic")
         refresh_btn.set_tooltip_text("Reload outputs from niri")
@@ -88,6 +88,9 @@ class OutputsPage(BasePage):
                 self._load_output_detail(self._outputs[0])
             if self._canvas:
                 self._canvas.queue_draw()
+            # Rebuild search index as the detail rows are now populated
+            if hasattr(self._win, "_build_search_index"):
+                self._win._build_search_index()
 
         niri_ipc.get_outputs(_on_got_outputs)
 
@@ -232,6 +235,9 @@ class OutputsPage(BasePage):
         idx = combo.get_selected()
         if 0 <= idx < len(self._outputs):
             self._load_output_detail(self._outputs[idx])
+            # Rebuild search index as the detail rows have changed
+            if hasattr(self._win, "_build_search_index"):
+                self._win._build_search_index()
 
     def _load_output_detail(self, output: dict):
         self._current_out = output

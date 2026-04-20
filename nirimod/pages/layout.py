@@ -18,7 +18,7 @@ CENTER_OPTIONS = ["never", "always", "on-overflow"]
 
 class LayoutPage(BasePage):
     def build(self) -> Gtk.Widget:
-        tb, _, _, content = make_toolbar_page("Layout")
+        tb, _, _, content = self._make_toolbar_page("Layout")
         self._content = content
         self._build_content()
         return tb
@@ -83,41 +83,52 @@ class LayoutPage(BasePage):
         dcw_grp = Adw.PreferencesGroup(title="Default Column Width")
         dcw_node = layout.get_child("default-column-width")
 
-        self._dcw_prop_row = Adw.ActionRow(title="Proportion")
-        self._dcw_fixed_row = Adw.ActionRow(title="Fixed (px)")
-
         prop_val = 0.5
         fixed_val = 800
+        use_fixed = False
 
         if dcw_node:
             fc = dcw_node.get_child("fixed")
             pc = dcw_node.get_child("proportion")
             if fc and fc.args:
-                fixed_val = fc.args[0]
+                fixed_val = int(fc.args[0])
+                use_fixed = True
             elif pc and pc.args:
-                prop_val = pc.args[0]
+                prop_val = float(pc.args[0])
 
-        prop_adj = Gtk.Adjustment(
-            value=prop_val, lower=0.05, upper=1.0, step_increment=0.05
-        )
+        mode_model = Gtk.StringList.new(["Proportion", "Fixed (px)"])
+        mode_row = Adw.ComboRow(title="Mode", model=mode_model)
+        mode_row.set_selected(1 if use_fixed else 0)
+        dcw_grp.add(mode_row)
+
+        prop_adj = Gtk.Adjustment(value=prop_val, lower=0.05, upper=1.0, step_increment=0.05)
         prop_spin = Gtk.SpinButton(adjustment=prop_adj, digits=2, climb_rate=1)
         prop_spin.set_valign(Gtk.Align.CENTER)
-        prop_spin.connect(
-            "value-changed", lambda s: self._set_dcw_proportion(s.get_value())
-        )
-        self._dcw_prop_row.add_suffix(prop_spin)
-        dcw_grp.add(self._dcw_prop_row)
+        prop_spin.connect("value-changed", lambda s: self._set_dcw_proportion(s.get_value()))
+        prop_row = Adw.ActionRow(title="Proportion")
+        prop_row.add_suffix(prop_spin)
+        prop_row.set_visible(not use_fixed)
+        dcw_grp.add(prop_row)
 
-        fixed_adj = Gtk.Adjustment(
-            value=fixed_val, lower=100, upper=7680, step_increment=10
-        )
+        fixed_adj = Gtk.Adjustment(value=fixed_val, lower=100, upper=7680, step_increment=10)
         fixed_spin = Gtk.SpinButton(adjustment=fixed_adj, digits=0, climb_rate=1)
         fixed_spin.set_valign(Gtk.Align.CENTER)
-        fixed_spin.connect(
-            "value-changed", lambda s: self._set_dcw_fixed(int(s.get_value()))
-        )
-        self._dcw_fixed_row.add_suffix(fixed_spin)
-        dcw_grp.add(self._dcw_fixed_row)
+        fixed_spin.connect("value-changed", lambda s: self._set_dcw_fixed(int(s.get_value())))
+        fixed_row = Adw.ActionRow(title="Fixed Width (px)")
+        fixed_row.add_suffix(fixed_spin)
+        fixed_row.set_visible(use_fixed)
+        dcw_grp.add(fixed_row)
+
+        def _on_mode_changed(r, _):
+            is_fixed = r.get_selected() == 1
+            prop_row.set_visible(not is_fixed)
+            fixed_row.set_visible(is_fixed)
+            if is_fixed:
+                self._set_dcw_fixed(int(fixed_spin.get_value()))
+            else:
+                self._set_dcw_proportion(prop_spin.get_value())
+
+        mode_row.connect("notify::selected", _on_mode_changed)
         content.append(dcw_grp)
 
         pw_grp = Adw.PreferencesGroup(title="Preset Column Widths (proportions)")
@@ -127,10 +138,9 @@ class LayoutPage(BasePage):
         if pcw_node:
             for c in pcw_node.children:
                 if c.name == "proportion" and c.args:
-                    presets.append(c.args[0])
-        self._preset_rows: list[Adw.EntryRow] = []
+                    presets.append(float(c.args[0]))
+        self._preset_spins: list[Gtk.SpinButton] = []
         self._pw_grp = pw_grp
-        self._pw_node_ref = pcw_node
         for val in presets or [0.333, 0.5, 0.667]:
             self._add_preset_row(pw_grp, val)
         add_preset_btn = Gtk.Button(label="Add Preset")
@@ -159,10 +169,12 @@ class LayoutPage(BasePage):
         content.append(struts_grp)
 
     def _add_preset_row(self, grp: Adw.PreferencesGroup, val: float):
-        row = Adw.ActionRow(title=f"Proportion {val:.3f}")
         spin_adj = Gtk.Adjustment(value=val, lower=0.05, upper=1.0, step_increment=0.05)
         spin = Gtk.SpinButton(adjustment=spin_adj, digits=3, climb_rate=1)
         spin.set_valign(Gtk.Align.CENTER)
+        self._preset_spins.append(spin)
+
+        row = Adw.ActionRow(title=f"Proportion {val:.3f}")
         spin.connect(
             "value-changed",
             lambda s, r=row: (
@@ -170,24 +182,32 @@ class LayoutPage(BasePage):
                 self._save_presets(),
             ),
         )
+
         del_btn = Gtk.Button(icon_name="user-trash-symbolic")
         del_btn.set_valign(Gtk.Align.CENTER)
         del_btn.add_css_class("flat")
         del_btn.add_css_class("error")
-        del_btn.connect("clicked", lambda *_: (grp.remove(row), self._save_presets()))
+
+        def _on_delete(s=spin):
+            self._preset_spins.remove(s)
+            grp.remove(row)
+            self._save_presets()
+
+        del_btn.connect("clicked", lambda *_: _on_delete())
         row.add_suffix(spin)
         row.add_suffix(del_btn)
         grp.add(row)
 
     def _save_presets(self):
-
         layout = find_or_create(self._nodes, "layout")
         pcw = layout.get_child("preset-column-widths")
         if pcw is None:
             pcw = KdlNode("preset-column-widths")
             layout.children.append(pcw)
-        pcw.children.clear()
-
+        pcw.children = [
+            KdlNode("proportion", args=[round(s.get_value(), 5)])
+            for s in self._preset_spins
+        ]
         self._commit("preset column widths")
 
     def _set_layout(self, key: str, value):
@@ -227,12 +247,22 @@ class LayoutPage(BasePage):
 
     def _toggle_top(self, key: str, enabled: bool):
         nodes = self._nodes
-
         existing = next((n for n in nodes if n.name == key), None)
+        
+        app_state = self._win.app_state
         if enabled and not existing:
-            nodes.append(KdlNode(key))
+            cache = getattr(app_state, "_removed_top_nodes", {})
+            if key in cache:
+                idx, node = cache[key]
+                nodes.insert(min(idx, len(nodes)), node)
+            else:
+                nodes.append(KdlNode(key))
         elif not enabled and existing:
+            if not hasattr(app_state, "_removed_top_nodes"):
+                app_state._removed_top_nodes = {}
+            app_state._removed_top_nodes[key] = (nodes.index(existing), existing)
             nodes.remove(existing)
+            
         self._commit(f"toggle {key}")
 
     def refresh(self):
