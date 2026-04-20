@@ -166,16 +166,22 @@ def _rgb(r: int, g: int, b: int, a: float = 1.0):
     return (r / 255, g / 255, b / 255, a)
 
 
-_COL_KEY_BG = _rgb(30, 30, 30)
-_COL_KEY_BORDER = _rgb(255, 255, 255, 0.08)
-_COL_KEY_FG = _rgb(200, 200, 200)
-_COL_BOUND_BG = _rgb(53, 132, 228, 0.22)
-_COL_BOUND_BORDER = _rgb(53, 132, 228, 0.65)
-_COL_BOUND_MOD = _rgb(53, 132, 228)
-_COL_SEL_BG = _rgb(53, 132, 228, 0.35)
-_COL_SEL_BORDER = _rgb(53, 132, 228, 1.0)
-_COL_SEARCH_BG = _rgb(192, 97, 203, 0.25)
-_COL_SEARCH_BORDER = _rgb(192, 97, 203, 0.8)
+_COL_KEY_BG = _rgb(24, 24, 27)
+_COL_KEY_BORDER = _rgb(255, 255, 255, 0.06)
+_COL_KEY_FG = _rgb(161, 161, 170)
+
+_COL_BOUND_BG = _rgb(88, 28, 135, 0.45)
+_COL_BOUND_BORDER = _rgb(147, 51, 234, 0.7)
+_COL_BOUND_MOD = _rgb(192, 132, 252)
+
+_COL_SEL_BG = _rgb(126, 34, 206, 0.6)
+_COL_SEL_BORDER = _rgb(168, 85, 247, 1.0)
+
+_COL_SEARCH_BG = _rgb(192, 97, 203, 0.35)
+_COL_SEARCH_BORDER = _rgb(192, 97, 203, 1.0)
+
+_COL_FRAME_BG = _rgb(12, 12, 13)
+_COL_FRAME_BORDER = _rgb(255, 255, 255, 0.08)
 
 
 class KeyboardVisualizer(Gtk.Box):
@@ -183,6 +189,8 @@ class KeyboardVisualizer(Gtk.Box):
 
     __gsignals__ = {
         "key-selected": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+        "edit-binding": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
+        "add-binding": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
     }
 
     def __init__(self):
@@ -215,7 +223,10 @@ class KeyboardVisualizer(Gtk.Box):
         # We no longer need _on_resize since AspectFrame handles the scaling
 
         # Action overlay panel
-        self._panel = _ActionPanel()
+        self._panel = _ActionPanel(
+            on_edit=lambda b: self.emit("edit-binding", b),
+            on_add=lambda k: self.emit("add-binding", k),
+        )
         self.append(self._panel)
 
         # Legend
@@ -267,15 +278,25 @@ class KeyboardVisualizer(Gtk.Box):
     def _draw(self, area, cr, width: int, height: int):
         self._key_rects = []
 
-        # Margins
-        pad_x, pad_y = 10, 8
+        # Margins for the outer "chassis"
+        chassis_pad = 12
+        pad_x, pad_y = 20, 16  # padding inside the chassis
+
         inner_w = width - 2 * pad_x
         inner_h = height - 2 * pad_y
 
         n_rows = len(KEYBOARD_ROWS)
         row_h = inner_h / n_rows
-        key_gap = max(2.0, row_h * 0.06)
-        radius = max(3.0, row_h * 0.14)
+        key_gap = max(4.0, row_h * 0.12)
+        radius = max(4.0, row_h * 0.18)
+
+        # 1. Draw the Keyboard Chassis
+        cr.set_source_rgba(*_COL_FRAME_BG)
+        self._rounded_rect(cr, chassis_pad, chassis_pad, width - 2 * chassis_pad, height - 2 * chassis_pad, radius * 1.5)
+        cr.fill_preserve()
+        cr.set_source_rgba(*_COL_FRAME_BORDER)
+        cr.set_line_width(1.5)
+        cr.stroke()
 
         # Compute max row width from actual layout data (rows are all equal)
         total_units = max(sum(w for _, _, w in row) for row in KEYBOARD_ROWS)
@@ -308,14 +329,22 @@ class KeyboardVisualizer(Gtk.Box):
                     lw = 2.0
                 elif is_search:
                     bg, border = _COL_SEARCH_BG, _COL_SEARCH_BORDER
-                    lw = 1.5
+                    lw = 1.8
                 elif is_bound:
                     bg, border = _COL_BOUND_BG, _COL_BOUND_BORDER
-                    lw = 1.2
+                    lw = 1.4
                 else:
                     bg, border = _COL_KEY_BG, _COL_KEY_BORDER
-                    lw = 0.8
+                    lw = 1.0
 
+                # Draw Key Shadow/Depth (solid color at bottom)
+                cr.set_source_rgba(0, 0, 0, 0.3)
+                self._rounded_rect(
+                    cr, key_rect_x, key_rect_y + 1, key_rect_w, key_rect_h, radius
+                )
+                cr.fill()
+
+                # Draw Key Body
                 self._rounded_rect(
                     cr, key_rect_x, key_rect_y, key_rect_w, key_rect_h, radius
                 )
@@ -327,15 +356,15 @@ class KeyboardVisualizer(Gtk.Box):
 
                 # Selected glow ring
                 if is_sel:
-                    cr.set_source_rgba(53 / 255, 132 / 255, 228 / 255, 0.18)
-                    cr.set_line_width(4.0)
+                    cr.set_source_rgba(168 / 255, 85 / 255, 247 / 255, 0.15)
+                    cr.set_line_width(5.0)
                     self._rounded_rect(
                         cr,
-                        key_rect_x - 2,
-                        key_rect_y - 2,
-                        key_rect_w + 4,
-                        key_rect_h + 4,
-                        radius + 2,
+                        key_rect_x - 3,
+                        key_rect_y - 3,
+                        key_rect_w + 6,
+                        key_rect_h + 6,
+                        radius + 3,
                     )
                     cr.stroke()
 
@@ -345,21 +374,21 @@ class KeyboardVisualizer(Gtk.Box):
                     if first_mod:
                         cr.set_source_rgba(*_COL_BOUND_MOD)
                         cr.select_font_face(
-                            "Sans",
+                            "Inter",
                             0,  # SLANT_NORMAL
                             1,
                         )  # WEIGHT_BOLD
-                        badge_fs = max(6.0, key_rect_h * 0.16)
+                        badge_fs = max(6.5, key_rect_h * 0.18)
                         cr.set_font_size(badge_fs)
-                        cr.move_to(key_rect_x + 2.5, key_rect_y + badge_fs + 0.5)
+                        cr.move_to(key_rect_x + 4, key_rect_y + badge_fs + 2)
                         cr.show_text(first_mod[:4].upper())
 
-                fs = max(7.0, key_rect_h * 0.30)
+                fs = max(8.0, key_rect_h * 0.32)
                 cr.set_font_size(fs)
-                cr.select_font_face("Sans", 0, 1)
+                cr.select_font_face("Inter", 0, 1)
 
                 if is_bound:
-                    cr.set_source_rgba(1, 1, 1, 0.92)
+                    cr.set_source_rgba(0.95, 0.95, 1, 1.0)
                 else:
                     cr.set_source_rgba(*_COL_KEY_FG)
 
@@ -372,14 +401,14 @@ class KeyboardVisualizer(Gtk.Box):
                 # Binding count badge (bottom-right)
                 if len(binds) > 1:
                     badge_txt = str(len(binds))
-                    bfs = max(5.5, key_rect_h * 0.14)
+                    bfs = max(6.0, key_rect_h * 0.16)
                     cr.set_font_size(bfs)
                     bte = cr.text_extents(badge_txt)
-                    bpad = 2.5
+                    bpad = 3.0
                     bw = bte.width + bpad * 2
                     bh = bte.height + bpad * 2
-                    bx = key_rect_x + key_rect_w - bw - 2
-                    by = key_rect_y + key_rect_h - bh - 2
+                    bx = key_rect_x + key_rect_w - bw - 4
+                    by = key_rect_y + key_rect_h - bh - 4
                     # Badge background circle
                     cr.set_source_rgba(*_COL_SEL_BORDER)
                     self._rounded_rect(cr, bx, by, bw, bh, bh / 2)
@@ -450,10 +479,10 @@ class KeyboardVisualizer(Gtk.Box):
             hb.append(lbl)
             return hb
 
-        box.append(_chip("rgba(53,132,228,0.6)", "Bound"))
-        box.append(_chip("rgba(192,97,203,0.55)", "Search match"))
-        box.append(_chip("rgba(53,132,228,1.0)", "Selected"))
-        box.append(_chip("rgba(40,40,40,1.0)", "Unbound"))
+        box.append(_chip("rgba(147, 51, 234, 0.7)", "Bound"))
+        box.append(_chip("rgba(192, 97, 203, 1.0)", "Search match"))
+        box.append(_chip("rgba(168, 85, 247, 1.0)", "Selected"))
+        box.append(_chip("rgba(24, 24, 27, 1.0)", "Unbound"))
         return box
 
 
@@ -463,8 +492,10 @@ class KeyboardVisualizer(Gtk.Box):
 class _ActionPanel(Gtk.Box):
     """Shows the binding details for the currently selected key."""
 
-    def __init__(self):
+    def __init__(self, on_edit=None, on_add=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self._on_edit = on_edit
+        self._on_add = on_add
         self.add_css_class("nm-kb-action-panel")
         self.set_visible(False)
 
@@ -513,9 +544,17 @@ class _ActionPanel(Gtk.Box):
         if not binds:
             self._key_label.set_label(key_id.upper())
             self._count_label.set_label("No bindings")
-            row = Adw.ActionRow(title="No niri action bound to this key")
-            row.set_sensitive(False)
-            new_grp.add(row)
+            
+            add_btn = Gtk.Button(label=f"Create Binding for {key_id.upper()}")
+            add_btn.add_css_class("suggested-action")
+            add_btn.add_css_class("pill")
+            add_btn.set_halign(Gtk.Align.CENTER)
+            add_btn.set_margin_top(8)
+            add_btn.set_margin_bottom(8)
+            if self._on_add:
+                add_btn.connect("clicked", lambda *_: self._on_add(key_id))
+            
+            new_grp.add(add_btn)
         else:
             self._key_label.set_label(key_id.upper())
             n = len(binds)
@@ -571,6 +610,15 @@ class _ActionPanel(Gtk.Box):
                     lock.set_tooltip_text("Allowed when screen is locked")
                     lock.set_valign(Gtk.Align.CENTER)
                     row.add_suffix(lock)
+                    
+                # Edit Button
+                edit_btn = Gtk.Button(icon_name="document-edit-symbolic")
+                edit_btn.add_css_class("flat")
+                edit_btn.add_css_class("circular")
+                edit_btn.set_valign(Gtk.Align.CENTER)
+                if self._on_edit:
+                    edit_btn.connect("clicked", lambda *_, bind_ref=b: self._on_edit(bind_ref))
+                row.add_suffix(edit_btn)
 
                 new_grp.add(row)
 
