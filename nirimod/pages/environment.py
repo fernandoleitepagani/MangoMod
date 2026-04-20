@@ -15,20 +15,10 @@ from nirimod.pages.base import BasePage, make_toolbar_page
 
 class EnvironmentPage(BasePage):
     def build(self) -> Gtk.Widget:
-        tb, header, _, content = make_toolbar_page("Environment")
+        tb, header, _, content = self._make_toolbar_page("Environment")
         self._content = content
 
-        add_btn = Gtk.Button(icon_name="list-add-symbolic")
-        add_btn.add_css_class("flat")
-        add_btn.set_tooltip_text("Add variable")
-        add_btn.connect("clicked", self._on_add)
-        header.pack_end(add_btn)
-
-        self._grp = Adw.PreferencesGroup(
-            title="Environment Variables",
-            description="Variables set for niri and all spawned processes",
-        )
-        content.append(self._grp)
+        # Add button has been moved to the page body for better visibility
         self.refresh()
         return tb
 
@@ -39,29 +29,68 @@ class EnvironmentPage(BasePage):
         return find_or_create(self._nodes, "environment")
 
     def _rebuild(self):
-        parent = self._grp.get_parent()
-        if parent is None:
-            return
+        # Clear existing content
+        while True:
+            child = self._content.get_first_child()
+            if child is None:
+                break
+            self._content.remove(child)
+
         env = self._get_env_node()
         entries = list(env.children)
-        new_grp = Adw.PreferencesGroup(
-            title="Environment Variables", description=f"{len(entries)} variable(s)"
-        )
-        for i, child in enumerate(entries):
-            row = self._make_row(child, i)
-            new_grp.add(row)
-        parent.remove(self._grp)
-        parent.append(new_grp)
-        self._grp = new_grp
+
+        if not entries:
+            status = Adw.StatusPage(
+                title="No Environment Variables",
+                description="Variables set here will apply to niri and all processes it spawns.",
+                icon_name="preferences-system-symbolic",
+            )
+
+            add_btn = Gtk.Button(label="Add Variable")
+            add_btn.add_css_class("pill")
+            add_btn.add_css_class("suggested-action")
+            add_btn.set_halign(Gtk.Align.CENTER)
+            add_btn.connect("clicked", self._on_add)
+
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            box.set_valign(Gtk.Align.CENTER)
+            box.set_vexpand(True)
+            box.append(status)
+            box.append(add_btn)
+
+            self._content.append(box)
+        else:
+            grp = Adw.PreferencesGroup(
+                title="Environment Variables",
+                description=f"{len(entries)} variable{'s' if len(entries) != 1 else ''} configured",
+            )
+            for i, child in enumerate(entries):
+                row = self._make_row(child, i)
+                grp.add(row)
+
+            self._content.append(grp)
+            
+            # Convenient button at the bottom
+            add_btn = Gtk.Button(label="Add Another Variable")
+            add_btn.add_css_class("pill")
+            add_btn.set_halign(Gtk.Align.CENTER)
+            add_btn.set_margin_top(16)
+            add_btn.connect("clicked", self._on_add)
+            self._content.append(add_btn)
 
     def _make_row(self, node: KdlNode, idx: int) -> Adw.ActionRow:
         key = node.name
         val = node.args[0] if node.args else ""
+        
+        # Make key bold and distinct
+        key_str = GLib.markup_escape_text(key)
+        val_str = GLib.markup_escape_text(str(val))
+        
         row = Adw.ActionRow(
-            title=GLib.markup_escape_text(key),
-            subtitle=GLib.markup_escape_text(str(val)),
+            title=f"<b>{key_str}</b>",
+            subtitle=val_str if val_str else "(empty)",
         )
-
+        row.set_use_markup(True)
         edit_btn = Gtk.Button(icon_name="document-edit-symbolic")
         edit_btn.set_valign(Gtk.Align.CENTER)
         edit_btn.add_css_class("flat")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 
+import shlex
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -15,20 +16,11 @@ from nirimod.pages.base import BasePage, make_toolbar_page
 
 class StartupPage(BasePage):
     def build(self) -> Gtk.Widget:
-        tb, header, _, content = make_toolbar_page("Startup Programs")
+        tb, header, _, content = self._make_toolbar_page("Startup Programs")
         self._content = content
 
-        add_btn = Gtk.Button(icon_name="list-add-symbolic")
-        add_btn.add_css_class("flat")
-        add_btn.set_tooltip_text("Add startup entry")
-        add_btn.connect("clicked", self._on_add)
-        header.pack_end(add_btn)
 
-        self._grp = Adw.PreferencesGroup(
-            title="Startup Programs",
-            description="Programs launched automatically when niri starts",
-        )
-        content.append(self._grp)
+
         self.refresh()
         return tb
 
@@ -43,38 +35,71 @@ class StartupPage(BasePage):
         ]
 
     def _rebuild(self):
-        parent = self._grp.get_parent()
-        if parent is None:
-            return
+        # Clear existing content
+        while True:
+            child = self._content.get_first_child()
+            if child is None:
+                break
+            self._content.remove(child)
+
         entries = self._get_entries()
-        new_grp = Adw.PreferencesGroup(
-            title="Startup Programs",
-            description=f"{len(entries)} entr{'ies' if len(entries) != 1 else 'y'}",
-        )
-        for i, entry in enumerate(entries):
-            row = self._make_row(entry, i)
-            new_grp.add(row)
-        parent.remove(self._grp)
-        parent.append(new_grp)
-        self._grp = new_grp
+
+        if not entries:
+            status = Adw.StatusPage(
+                title="No Startup Programs",
+                description="Programs added here will launch automatically when niri starts.",
+                icon_name="applications-system-symbolic",
+            )
+
+            add_btn = Gtk.Button(label="Add Program")
+            add_btn.add_css_class("pill")
+            add_btn.add_css_class("suggested-action")
+            add_btn.set_halign(Gtk.Align.CENTER)
+            add_btn.connect("clicked", self._on_add)
+
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            box.set_valign(Gtk.Align.CENTER)
+            box.set_vexpand(True)
+            box.append(status)
+            box.append(add_btn)
+
+            self._content.append(box)
+        else:
+            grp = Adw.PreferencesGroup(
+                title="Startup Programs",
+                description=f"{len(entries)} program{'s' if len(entries) != 1 else ''} configured to launch",
+            )
+            for i, entry in enumerate(entries):
+                row = self._make_row(entry, i)
+                grp.add(row)
+
+            self._content.append(grp)
+            
+            # Also add a convenient button at the bottom
+            add_btn = Gtk.Button(label="Add Another Program")
+            add_btn.add_css_class("pill")
+            add_btn.set_halign(Gtk.Align.CENTER)
+            add_btn.set_margin_top(16)
+            add_btn.connect("clicked", self._on_add)
+            self._content.append(add_btn)
 
     def _make_row(self, node: KdlNode, idx: int) -> Adw.ActionRow:
         cmd = " ".join(str(a) for a in node.args)
         is_sh = "sh" in node.name
+        cmd_str = GLib.markup_escape_text(cmd) if cmd else "(empty)"
+
         row = Adw.ActionRow(
-            title=GLib.markup_escape_text(cmd) if cmd else "(empty)",
-            subtitle="shell" if is_sh else "direct",
+            title=cmd_str or "(empty)",
+            subtitle="Via shell (spawn-sh-at-startup)" if is_sh else "Launched directly",
         )
-        edit_btn = Gtk.Button(icon_name="document-edit-symbolic")
-        edit_btn.set_valign(Gtk.Align.CENTER)
-        edit_btn.add_css_class("flat")
-        edit_btn.connect("clicked", lambda *_, i=idx: self._on_edit(i))
-        row.add_suffix(edit_btn)
+        row.set_activatable(True)
+        row.connect("activated", lambda *_, i=idx: self._on_edit(i))
 
         del_btn = Gtk.Button(icon_name="user-trash-symbolic")
         del_btn.set_valign(Gtk.Align.CENTER)
         del_btn.add_css_class("flat")
         del_btn.add_css_class("error")
+        del_btn.set_tooltip_text("Remove startup entry")
         del_btn.connect("clicked", lambda *_, i=idx: self._on_delete(i))
         row.add_suffix(del_btn)
         return row
@@ -123,7 +148,13 @@ class StartupPage(BasePage):
                 return
             is_sh = sh_switch.get_active()
             node_name = "spawn-sh-at-startup" if is_sh else "spawn-at-startup"
-            new_node = KdlNode(node_name, args=cmd.split())
+            try:
+                args = shlex.split(cmd)
+            except ValueError:
+                # Fallback if user left an unclosed quote
+                args = cmd.split()
+                
+            new_node = KdlNode(node_name, args=args)
             entries = self._get_entries()
             if idx >= 0 and 0 <= idx < len(entries):
                 i = self._nodes.index(entries[idx])

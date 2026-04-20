@@ -20,7 +20,7 @@ from nirimod.pages.base import BasePage, make_toolbar_page
 
 class GesturesPage(BasePage):
     def build(self) -> Gtk.Widget:
-        tb, _, _, content = make_toolbar_page("Gestures & Misc")
+        tb, _, _, content = self._make_toolbar_page("Gestures & Misc")
         self._content = content
         self._build_content()
         return tb

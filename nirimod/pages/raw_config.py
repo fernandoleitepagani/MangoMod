@@ -17,44 +17,59 @@ from nirimod.pages.base import BasePage, make_toolbar_page
 
 class RawConfigPage(BasePage):
     def build(self) -> Gtk.Widget:
-        tb, header, _, content = make_toolbar_page("Raw Config")
+        tb, header, _, content = self._make_toolbar_page("Raw Config")
         self._content = content
-
-        refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic")
-        refresh_btn.add_css_class("flat")
-        refresh_btn.set_tooltip_text("Refresh")
-        refresh_btn.connect("clicked", lambda *_: self.refresh())
-        header.pack_end(refresh_btn)
-
-        open_btn = Gtk.Button(icon_name="document-open-symbolic")
-        open_btn.add_css_class("flat")
-        open_btn.set_tooltip_text("Open config.kdl in default editor")
-        open_btn.connect("clicked", self._on_open_editor)
-        header.pack_end(open_btn)
-
-        validate_btn = Gtk.Button(icon_name="emblem-ok-symbolic")
-        validate_btn.add_css_class("flat")
-        validate_btn.set_tooltip_text("Validate config")
+        
+        # Action Bar
+        action_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        action_bar.set_margin_bottom(16)
+        
+        # Validate button
+        validate_btn = Gtk.Button(label="Validate", icon_name="emblem-ok-symbolic")
+        validate_btn.add_css_class("pill")
+        validate_btn.add_css_class("suggested-action")
         validate_btn.connect("clicked", self._on_validate)
-        header.pack_end(validate_btn)
+        action_bar.append(validate_btn)
+        
+        # Open in Editor button
+        open_btn = Gtk.Button(label="Open Editor", icon_name="document-open-symbolic")
+        open_btn.add_css_class("pill")
+        open_btn.connect("clicked", self._on_open_editor)
+        action_bar.append(open_btn)
+        
+        # Refresh button
+        refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic")
+        refresh_btn.add_css_class("pill")
+        refresh_btn.set_tooltip_text("Reload config from disk")
+        refresh_btn.connect("clicked", lambda *_: self.refresh())
+        action_bar.append(refresh_btn)
+        
+        # Copy button
+        copy_btn = Gtk.Button(icon_name="edit-copy-symbolic")
+        copy_btn.add_css_class("pill")
+        copy_btn.set_tooltip_text("Copy to clipboard")
+        copy_btn.connect("clicked", self._on_copy)
+        action_bar.append(copy_btn)
+
+        # Status spacer
+        action_bar.append(Gtk.Box(hexpand=True))
 
         self._status_lbl = Gtk.Label(label="")
-        self._status_lbl.set_xalign(0.0)
-        self._status_lbl.set_margin_start(4)
-        self._status_lbl.set_margin_bottom(6)
-        content.append(self._status_lbl)
+        self._status_lbl.set_xalign(1.0)
+        self._status_lbl.add_css_class("dim-label")
+        action_bar.append(self._status_lbl)
 
-        # No toggle buttons, just show config.kdl
+        content.append(action_bar)
 
         self._textview = Gtk.TextView()
         self._textview.set_editable(False)
         self._textview.set_monospace(True)
         self._textview.set_wrap_mode(Gtk.WrapMode.NONE)
-        self._textview.set_left_margin(12)
-        self._textview.set_right_margin(12)
-        self._textview.set_top_margin(8)
-        self._textview.set_bottom_margin(8)
-        self._textview.add_css_class("card")
+        self._textview.set_left_margin(16)
+        self._textview.set_right_margin(16)
+        self._textview.set_top_margin(16)
+        self._textview.set_bottom_margin(16)
+        self._textview.add_css_class("code-editor")
 
         scroll2 = Gtk.ScrolledWindow()
         scroll2.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
@@ -115,6 +130,13 @@ class RawConfigPage(BasePage):
             subprocess.Popen(["xdg-open", str(NIRI_CONFIG)])
         except Exception as e:
             self.show_toast(f"Failed to open editor: {e}")
+
+    def _on_copy(self, *_):
+        buf = self._textview.get_buffer()
+        text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        cb = self._textview.get_clipboard()
+        cb.set_text(text)
+        self.show_toast("Config copied to clipboard", timeout=2)
 
     def _on_validate(self, *_):
         self._status_lbl.set_label("Validating...")
