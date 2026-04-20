@@ -15,21 +15,34 @@ from nirimod.state import AppState
 from nirimod import profiles as prof_mod
 from nirimod.theme import CSS
 
-SIDEBAR_PAGES = [
-    ("outputs", "video-display-symbolic", "Outputs"),
-    ("keyboard", "input-keyboard-symbolic", "Keyboard"),
-    ("mouse", "input-mouse-symbolic", "Mouse & Touchpad"),
-    ("layout", "view-grid-symbolic", "Layout"),
-    ("appearance", "preferences-desktop-appearance-symbolic", "Appearance"),
-    ("animations", "applications-multimedia-symbolic", "Animations"),
-    ("bindings", "preferences-desktop-keyboard-shortcuts-symbolic", "Key Bindings"),
-    ("window_rules", "preferences-system-symbolic", "Window Rules"),
-    ("startup", "system-run-symbolic", "Startup Programs"),
-    ("workspaces", "view-paged-symbolic", "Workspaces"),
-    ("environment", "preferences-other-symbolic", "Environment"),
-    ("gestures", "input-touchpad-symbolic", "Gestures & Misc"),
-    ("raw_config", "text-x-generic-symbolic", "Raw Config"),
+# Grouped sidebar structure: (section_title, [(page_id, icon, label), ...])
+SIDEBAR_GROUPS = [
+    ("Input", [
+        ("input", "input-keyboard-symbolic", "Input"),
+        ("bindings", "preferences-desktop-keyboard-shortcuts-symbolic", "Key Bindings"),
+    ]),
+    ("Display", [
+        ("outputs", "video-display-symbolic", "Outputs"),
+        ("appearance", "preferences-desktop-appearance-symbolic", "Appearance"),
+        ("animations", "applications-multimedia-symbolic", "Animations"),
+    ]),
+    ("Workspace", [
+        ("layout", "view-grid-symbolic", "Layout"),
+        ("workspaces", "view-paged-symbolic", "Workspaces"),
+        ("window_rules", "preferences-system-symbolic", "Window Rules"),
+    ]),
+    ("System", [
+        ("startup", "system-run-symbolic", "Startup"),
+        ("environment", "preferences-other-symbolic", "Environment"),
+        ("gestures", "input-touchpad-symbolic", "Gestures & Misc"),
+    ]),
+    ("Advanced", [
+        ("raw_config", "text-x-generic-symbolic", "Raw Config"),
+    ]),
 ]
+
+# Flat list for backward compat (select_page, search index, etc.)
+SIDEBAR_PAGES = [entry for _, group in SIDEBAR_GROUPS for entry in group]
 
 
 class NiriModWindow(Adw.ApplicationWindow):
@@ -44,11 +57,13 @@ class NiriModWindow(Adw.ApplicationWindow):
         self._current_page_id = ""
         self._pages: dict[str, Gtk.Widget] = {}
         self._sidebar_rows: dict[str, Gtk.ListBoxRow] = {}
+        self._sidebar_listboxes: dict[str, Gtk.ListBox] = {}
         self._badge_labels: dict[str, Gtk.Label] = {}
 
         self._load_css()
         self._build_ui()
         self._check_onboarding()
+        self._check_for_updates()
 
     def _load_css(self):
         provider = Gtk.CssProvider()
@@ -93,84 +108,89 @@ class NiriModWindow(Adw.ApplicationWindow):
         sidebar_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         sidebar_box.add_css_class("nm-sidebar-bg")
 
-        # Sidebar header and search
+        # Header with app title and a menu button for profiles
         header = Adw.HeaderBar()
-        header.set_title_widget(
-            Adw.WindowTitle(title="NiriMod", subtitle="Niri Config")
-        )
+        title_widget = Adw.WindowTitle(title="NiriMod", subtitle="Config Editor")
+        header.set_title_widget(title_widget)
+
         sidebar_box.append(header)
 
+        # Search bar
         self._search_entry = Gtk.SearchEntry()
-        self._search_entry.set_placeholder_text("Search settings…")
+        self._search_entry.set_placeholder_text("Search settings\u2026")
         self._search_entry.add_css_class("nm-search-entry")
         self._search_entry.set_margin_start(10)
         self._search_entry.set_margin_end(10)
-        self._search_entry.set_margin_top(8)
-        self._search_entry.set_margin_bottom(4)
+        self._search_entry.set_margin_top(10)
+        self._search_entry.set_margin_bottom(0)
         self._search_entry.connect("search-changed", self._on_search_changed)
         self._search_entry.connect("stop-search", self._on_stop_search)
+        # Enter key navigates to the highlighted result
+        self._search_entry.connect("activate", self._on_search_activate)
+        # Up/Down keys move the selection without stealing focus
+        key_ctrl = Gtk.EventControllerKey()
+        key_ctrl.connect("key-pressed", self._on_search_key_pressed)
+        self._search_entry.add_controller(key_ctrl)
         sidebar_box.append(self._search_entry)
 
-        self._search_popover = Gtk.Popover()
-        self._search_popover.set_parent(self._search_entry)
-        self._search_popover.set_position(Gtk.PositionType.BOTTOM)
-        self._search_popover.set_has_arrow(False)
-        self._search_popover.set_autohide(False)
-        # Sizing
-        self._search_popover.set_size_request(320, 300)
-
-        pop_scroll = Gtk.ScrolledWindow()
-        pop_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        pop_scroll.set_max_content_height(400)
-        pop_scroll.set_propagate_natural_height(True)
-
+        # Inline results panel using a Revealer -- no Popover, no focus shift
+        self._search_revealer = Gtk.Revealer()
+        self._search_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self._search_revealer.set_transition_duration(120)
+        self._search_revealer.set_reveal_child(False)
+        self._search_revealer.set_margin_start(8)
+        self._search_revealer.set_margin_end(8)
+        self._search_revealer.set_margin_top(4)
+        self._search_revealer.set_margin_bottom(4)
+        results_scroll = Gtk.ScrolledWindow()
+        results_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        results_scroll.set_max_content_height(300)
+        results_scroll.set_propagate_natural_height(True)
         self._search_results_listbox = Gtk.ListBox()
-        self._search_results_listbox.add_css_class("navigation-sidebar")
-        self._search_results_listbox.connect(
-            "row-activated", self._on_search_result_activated
-        )
-        pop_scroll.set_child(self._search_results_listbox)
-        self._search_popover.set_child(pop_scroll)
+        self._search_results_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self._search_results_listbox.add_css_class("nm-search-results")
+        self._search_results_listbox.connect("row-activated", self._on_search_result_activated)
+        results_scroll.set_child(self._search_results_listbox)
+        self._search_revealer.set_child(results_scroll)
+        sidebar_box.append(self._search_revealer)
 
-        profile_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        profile_box.set_margin_start(12)
-        profile_box.set_margin_end(12)
-        profile_box.set_margin_top(6)
-        profile_box.set_margin_bottom(2)
-
-        prof_label = Gtk.Label(label="Profile:")
-        prof_label.set_opacity(0.6)
-        prof_label.set_hexpand(True)
-        prof_label.set_xalign(0.0)
-        profile_box.append(prof_label)
-
-        self._prof_btn = Gtk.Button(label="Manage")
-        self._prof_btn.add_css_class("flat")
-        self._prof_btn.add_css_class("nm-profile-chip")
-        self._prof_btn.connect("clicked", self._on_profiles_clicked)
-        profile_box.append(self._prof_btn)
-        sidebar_box.append(profile_box)
-
-        sep = Gtk.Separator()
-        sep.set_margin_top(6)
-        sidebar_box.append(sep)
-
-        # Sidebar list
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_vexpand(True)
 
-        self._listbox = Gtk.ListBox()
-        self._listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
-        self._listbox.add_css_class("navigation-sidebar")
-        self._listbox.connect("row-selected", self._on_row_selected)
+        nav_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        nav_box.set_margin_top(8)
+        nav_box.set_margin_bottom(16)
 
-        for page_id, icon, label in SIDEBAR_PAGES:
-            row = self._make_sidebar_row(page_id, icon, label)
-            self._listbox.append(row)
-            self._sidebar_rows[page_id] = row
+        for section_title, pages in SIDEBAR_GROUPS:
+            # Section header label
+            section_lbl = Gtk.Label(label=section_title.upper())
+            section_lbl.set_xalign(0.0)
+            section_lbl.set_margin_start(16)
+            section_lbl.set_margin_end(16)
+            section_lbl.set_margin_top(16)
+            section_lbl.set_margin_bottom(4)
+            section_lbl.add_css_class("nm-sidebar-section-label")
+            nav_box.append(section_lbl)
 
-        scroll.set_child(self._listbox)
+            # Page rows for this section
+            listbox = Gtk.ListBox()
+            listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+            listbox.add_css_class("navigation-sidebar")
+            listbox.add_css_class("nm-sidebar-listbox")
+            listbox.set_margin_start(8)
+            listbox.set_margin_end(8)
+            listbox.connect("row-selected", self._on_row_selected)
+
+            for page_id, icon, label in pages:
+                row = self._make_sidebar_row(page_id, icon, label)
+                listbox.append(row)
+                self._sidebar_rows[page_id] = row
+                self._sidebar_listboxes[page_id] = listbox
+
+            nav_box.append(listbox)
+
+        scroll.set_child(nav_box)
         sidebar_box.append(scroll)
 
         nav.set_child(sidebar_box)
@@ -233,36 +253,44 @@ class NiriModWindow(Adw.ApplicationWindow):
         bar.set_margin_top(6)
         bar.set_margin_bottom(6)
 
-        lbl = Gtk.Label(label="Unsaved changes")
-        lbl.set_hexpand(True)
-        lbl.set_xalign(0.0)
-        lbl.set_opacity(0.7)
-        bar.append(lbl)
+        self._dirty_label = Gtk.Label(label="Unsaved changes")
+        self._dirty_label.set_hexpand(True)
+        self._dirty_label.set_xalign(0.0)
+        self._dirty_label.set_opacity(0.7)
+        bar.append(self._dirty_label)
 
         self._undo_btn = Gtk.Button(label="Undo")
         self._undo_btn.add_css_class("flat")
+        self._undo_btn.set_tooltip_text("Undo last change (Ctrl+Z)")
         self._undo_btn.connect("clicked", lambda *_: self._do_undo())
         bar.append(self._undo_btn)
+
+        self._redo_btn = Gtk.Button(label="Redo")
+        self._redo_btn.add_css_class("flat")
+        self._redo_btn.set_tooltip_text("Redo (Ctrl+Shift+Z)")
+        self._redo_btn.set_sensitive(False)
+        self._redo_btn.connect("clicked", lambda *_: self._do_redo())
+        bar.append(self._redo_btn)
 
         discard_btn = Gtk.Button(label="Discard")
         discard_btn.add_css_class("destructive-action")
         discard_btn.add_css_class("flat")
+        discard_btn.set_tooltip_text("Revert all unsaved changes")
         discard_btn.connect("clicked", lambda *_: self._on_discard())
         bar.append(discard_btn)
 
         save_btn = Gtk.Button(label="Save & Apply")
         save_btn.add_css_class("suggested-action")
+        save_btn.set_tooltip_text("Save to config.kdl and reload niri (Ctrl+S)")
         save_btn.connect("clicked", lambda *_: self._on_save())
         bar.append(save_btn)
 
         return bar
 
     def _build_all_pages(self):
-        """Import and add all page widgets to the stack."""
         from nirimod.pages import (
             outputs,
-            keyboard,
-            mouse,
+            input_page,
             layout,
             appearance,
             animations,
@@ -277,8 +305,7 @@ class NiriModWindow(Adw.ApplicationWindow):
 
         page_builders = {
             "outputs": outputs.OutputsPage,
-            "keyboard": keyboard.KeyboardPage,
-            "mouse": mouse.MousePage,
+            "input": input_page.InputPage,
             "layout": layout.LayoutPage,
             "appearance": appearance.AppearancePage,
             "animations": animations.AnimationsPage,
@@ -303,6 +330,10 @@ class NiriModWindow(Adw.ApplicationWindow):
             return
         pid = getattr(row, "page_id", None)
         if pid:
+            # Deselect all other listboxes to maintain single-selection across sections
+            for other_pid, lb in self._sidebar_listboxes.items():
+                if lb is not _lb:
+                    lb.unselect_all()
             self._select_page(pid)
 
     def _select_page(self, page_id: str):
@@ -312,10 +343,13 @@ class NiriModWindow(Adw.ApplicationWindow):
             if pid == page_id:
                 self._content_nav.set_title(title)
                 break
-        # select sidebar row
-        row = self._sidebar_rows.get(page_id)
-        if row:
-            self._listbox.select_row(row)
+        # Select the right sidebar row, deselect others
+        for pid, lb in self._sidebar_listboxes.items():
+            row = self._sidebar_rows.get(pid)
+            if row:
+                if pid == page_id:
+                    lb.select_row(row)
+                # others will be cleared via _on_row_selected cross-deselect
 
         # Notify page of visibility
         page = self._pages.get(page_id)
@@ -326,22 +360,32 @@ class NiriModWindow(Adw.ApplicationWindow):
         self._search_index: list[dict] = []
 
         def traverse(widget, pid, p_title):
+            # Index PreferencesRows (ActionRow, SwitchRow, ExpanderRow, SpinRow, etc.)
             if isinstance(widget, Adw.PreferencesRow):
                 title = widget.get_title()
                 if title:
-                    subtitle = (
-                        widget.get_subtitle() if hasattr(widget, "get_subtitle") else ""
-                    )
-                    self._search_index.append(
-                        {
-                            "page_id": pid,
-                            "page_title": p_title,
-                            "title": title,
-                            "subtitle": subtitle,
-                            "widget": widget,
-                        }
-                    )
+                    subtitle = widget.get_subtitle() if hasattr(widget, "get_subtitle") else ""
+                    self._search_index.append({
+                        "page_id": pid,
+                        "page_title": p_title,
+                        "title": title,
+                        "subtitle": subtitle,
+                        "widget": widget,
+                    })
 
+            # Index PreferencesGroups (provides search matches for section headers like "Focus Ring")
+            if isinstance(widget, Adw.PreferencesGroup):
+                title = widget.get_title()
+                if title:
+                    self._search_index.append({
+                        "page_id": pid,
+                        "page_title": p_title,
+                        "title": title,
+                        "subtitle": "(Group)",
+                        "widget": widget,
+                    })
+
+            # Recurse into all children to find nested elements
             child = widget.get_first_child()
             while child:
                 traverse(child, pid, p_title)
@@ -355,20 +399,16 @@ class NiriModWindow(Adw.ApplicationWindow):
     def _on_search_changed(self, entry):
         query = entry.get_text().strip().lower()
         if not query or len(query) < 2:
-            self._search_popover.popdown()
+            self._search_revealer.set_reveal_child(False)
             return
 
-        # Show matching settings in popover
-        matches = []
-        for r in self._search_index:
-            if (
-                query in r["title"].lower()
-                or query in r["subtitle"].lower()
-                or query in r["page_title"].lower()
-            ):
-                matches.append(r)
+        matches = [
+            r for r in self._search_index
+            if query in r["title"].lower()
+            or query in r["subtitle"].lower()
+            or query in r["page_title"].lower()
+        ]
 
-        # Clear existing popover rows
         child = self._search_results_listbox.get_first_child()
         while child:
             self._search_results_listbox.remove(child)
@@ -377,44 +417,69 @@ class NiriModWindow(Adw.ApplicationWindow):
         if matches:
             for m in matches:
                 row = Gtk.ListBoxRow()
-                row.search_match = m  # store reference
-                box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-                box.set_margin_start(10)
-                box.set_margin_end(10)
-                box.set_margin_top(8)
-                box.set_margin_bottom(8)
-
+                row.search_match = m
+                row.set_focusable(False)
+                box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+                box.set_margin_start(8)
+                box.set_margin_end(8)
+                box.set_margin_top(6)
+                box.set_margin_bottom(6)
                 title_lbl = Gtk.Label(label=m["title"], xalign=0)
                 title_lbl.add_css_class("heading")
+                title_lbl.set_focusable(False)
+                title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
                 box.append(title_lbl)
-
-                sub_text = f"{m['page_title']}"
+                sub_text = m["page_title"]
                 if m["subtitle"]:
-                    sub_text += f" • {m['subtitle']}"
-
+                    sub_text += f" \u2022 {m['subtitle']}"
                 sub_lbl = Gtk.Label(label=sub_text, xalign=0)
                 sub_lbl.add_css_class("dim-label")
-                sub_lbl.set_wrap(True)
-                sub_lbl.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+                sub_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+                sub_lbl.set_focusable(False)
                 box.append(sub_lbl)
-
                 row.set_child(box)
                 self._search_results_listbox.append(row)
-
-            self._search_popover.popup()
+            first = self._search_results_listbox.get_row_at_index(0)
+            if first:
+                self._search_results_listbox.select_row(first)
+            self._search_revealer.set_reveal_child(True)
         else:
-            self._search_popover.popdown()
+            self._search_revealer.set_reveal_child(False)
+
+    def _on_search_key_pressed(self, controller, keyval, keycode, state):
+        if not self._search_revealer.get_reveal_child():
+            return False
+        lb = self._search_results_listbox
+        sel = lb.get_selected_row()
+        if keyval == Gdk.KEY_Down:
+            idx = (sel.get_index() + 1) if sel else 0
+            nxt = lb.get_row_at_index(idx)
+            if nxt:
+                lb.select_row(nxt)
+            return True
+        if keyval == Gdk.KEY_Up:
+            if sel and sel.get_index() > 0:
+                lb.select_row(lb.get_row_at_index(sel.get_index() - 1))
+            return True
+        return False
+
+    def _on_search_activate(self, entry):
+        if not self._search_revealer.get_reveal_child():
+            return
+        sel = self._search_results_listbox.get_selected_row()
+        if sel:
+            self._on_search_result_activated(self._search_results_listbox, sel)
 
     def _on_stop_search(self, entry):
         entry.set_text("")
-        self._search_popover.popdown()
+        self._search_revealer.set_reveal_child(False)
 
     def _on_search_result_activated(self, listbox, row):
         if not hasattr(row, "search_match"):
             return
 
         m = row.search_match
-        self._search_popover.popdown()
+        self._search_revealer.set_reveal_child(False)
         self._search_entry.set_text("")
 
         # Navigate to the page
@@ -424,7 +489,6 @@ class NiriModWindow(Adw.ApplicationWindow):
         widget = m["widget"]
         widget.add_css_class("nm-pulse-highlight")
 
-        # Remove the highlight after 1.5 seconds
         def remove_class():
             widget.remove_css_class("nm-pulse-highlight")
             return False
@@ -449,25 +513,38 @@ class NiriModWindow(Adw.ApplicationWindow):
             self.add_action(a)
             app.set_accels_for_action(f"win.{name}", accels)
 
+        # Menu actions
+        open_profiles_action = Gio.SimpleAction.new("open_profiles", None)
+        open_profiles_action.connect("activate", lambda *_: self._on_profiles_clicked())
+        self.add_action(open_profiles_action)
+
+        open_prefs_action = Gio.SimpleAction.new("open_preferences", None)
+        open_prefs_action.connect("activate", lambda *_: self._open_preferences())
+        self.add_action(open_prefs_action)
+
     def get_nodes(self):
         return self.app_state.nodes
 
     def mark_dirty(self):
-        """Called by pages when they modify the config."""
         self.app_state.mark_dirty()
         self._dirty_bar.set_visible(True)
         self._undo_btn.set_sensitive(self.app_state.undo.can_undo())
+        self._redo_btn.set_sensitive(self.app_state.undo.can_redo())
+        desc = self.app_state.undo.last_description
+        self._dirty_label.set_label(f"Unsaved: {desc}" if desc else "Unsaved changes")
+        self._build_search_index()
 
     def mark_clean(self):
         self.app_state.mark_clean()
         self._dirty_bar.set_visible(False)
+        self._dirty_label.set_label("Unsaved changes")
+        self._redo_btn.set_sensitive(False)
 
     def push_undo(self, description: str, before: str, after: str):
         self.app_state.push_undo(description, before, after)
         self._undo_btn.set_sensitive(True)
 
     def notify_nodes_changed(self):
-        """Reload nodes from disk and refresh current page."""
         self.app_state.reload_from_disk()
         page = self._pages.get(self._current_page_id)
         if page and hasattr(page, "refresh"):
@@ -483,12 +560,10 @@ class NiriModWindow(Adw.ApplicationWindow):
         def _on_validated(result):
             ok, msg = result
             if not ok:
+                # Don't discard the user's work — just report the error and
+                # let them fix and retry.
                 self.show_toast(f"Validation error: {msg}", timeout=8)
                 tmp_kdl.unlink(missing_ok=True)
-                # Revert UI state cleanly
-                self.app_state.discard()
-                self.mark_clean()
-                self.notify_nodes_changed()
                 return
 
             # Move tmp to main config
@@ -535,6 +610,8 @@ class NiriModWindow(Adw.ApplicationWindow):
         if entry is None:
             return
 
+        self._redo_btn.set_sensitive(self.app_state.undo.can_redo())
+        self._undo_btn.set_sensitive(True)
         self.mark_dirty()
         self.notify_nodes_changed()
 
@@ -564,6 +641,34 @@ class NiriModWindow(Adw.ApplicationWindow):
         dialog.connect("response", self._on_onboarding_response)
         dialog.present(self)
 
+    def _check_for_updates(self):
+        from nirimod import app_settings, updater
+        if app_settings.get("auto_update", True):
+            updater.check_for_updates(self._on_update_check_result)
+
+    def _on_update_check_result(self, remote_sha: str | None, commit_msg: str | None):
+        if remote_sha is None:
+            return
+            
+        dialog = Adw.AlertDialog(
+            heading="Update Available",
+            body=f"A new version of NiriMod is available on GitHub!\n\n<b>Latest Commit:</b>\n{GLib.markup_escape_text(commit_msg or '')}",
+        )
+        dialog.set_body_use_markup(True)
+        dialog.add_response("cancel", "Later")
+        dialog.add_response("update", "Update in Terminal")
+        dialog.set_response_appearance("update", Adw.ResponseAppearance.SUGGESTED)
+        
+        def _on_response(dlg, response):
+            if response == "update":
+                from nirimod import updater
+                updater.launch_updater_in_terminal()
+                app = self.get_application()
+                if app:
+                    app.quit()
+        dialog.connect("response", _on_response)
+        dialog.present(self)
+
     def _on_onboarding_response(self, dialog, response):
         if response == "accept":
             try:
@@ -577,7 +682,39 @@ class NiriModWindow(Adw.ApplicationWindow):
             except Exception as e:
                 self.show_toast(f"Failed: {e}", timeout=6)
 
-    def _on_profiles_clicked(self, _btn):
+    def _open_preferences(self):
+        from nirimod import app_settings
+
+        prefs_win = Adw.PreferencesWindow()
+        prefs_win.set_title("NiriMod Preferences")
+        prefs_win.set_modal(True)
+        prefs_win.set_transient_for(self)
+        prefs_win.set_default_size(500, 400)
+
+        page = Adw.PreferencesPage(
+            title="General", icon_name="emblem-system-symbolic"
+        )
+
+        updates_grp = Adw.PreferencesGroup(
+            title="Updates",
+            description="Control how NiriMod checks for new versions",
+        )
+
+        auto_update_row = Adw.SwitchRow(
+            title="Check for Updates Automatically",
+            subtitle="Checks the GitHub repository for new commits on launch",
+        )
+        auto_update_row.set_active(app_settings.get("auto_update", True))
+        auto_update_row.connect(
+            "notify::active",
+            lambda row, _: app_settings.set("auto_update", row.get_active()),
+        )
+        updates_grp.add(auto_update_row)
+        page.add(updates_grp)
+        prefs_win.add(page)
+        prefs_win.present()
+
+    def _on_profiles_clicked(self, _btn=None):
         dialog = Adw.AlertDialog(heading="Profiles")
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -641,7 +778,42 @@ class NiriModWindow(Adw.ApplicationWindow):
     def _delete_profile(self, name: str, dialog):
         prof_mod.delete_profile(name)
         self.show_toast(f"Profile '{name}' deleted")
-        dialog.close()
+        # rebuild in-place so they don't have to reopen the dialog
+        extra = dialog.get_extra_child()
+        if extra:
+            dialog.set_extra_child(None)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_margin_start(4)
+        box.set_margin_end(4)
+        names = prof_mod.list_profiles()
+        if names:
+            grp = Adw.PreferencesGroup(title="Saved Profiles")
+            for n in names:
+                row = Adw.ActionRow(title=n)
+                load_btn = Gtk.Button(label="Load")
+                load_btn.set_valign(Gtk.Align.CENTER)
+                load_btn.add_css_class("flat")
+                load_btn.connect("clicked", lambda _b, nm=n: self._load_profile(nm, dialog))
+                del_btn = Gtk.Button(icon_name="user-trash-symbolic")
+                del_btn.set_valign(Gtk.Align.CENTER)
+                del_btn.add_css_class("flat")
+                del_btn.add_css_class("error")
+                del_btn.connect("clicked", lambda _b, nm=n: self._delete_profile(nm, dialog))
+                row.add_suffix(load_btn)
+                row.add_suffix(del_btn)
+                grp.add(row)
+            box.append(grp)
+        save_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        save_row.set_margin_top(8)
+        entry = Gtk.Entry(placeholder_text="New profile name\u2026")
+        entry.set_hexpand(True)
+        save_btn = Gtk.Button(label="Save Current")
+        save_btn.add_css_class("suggested-action")
+        save_btn.connect("clicked", lambda _b: self._save_profile(entry.get_text(), dialog))
+        save_row.append(entry)
+        save_row.append(save_btn)
+        box.append(save_row)
+        dialog.set_extra_child(box)
 
     def set_badge(self, page_id: str, count: int):
         lbl = self._badge_labels.get(page_id)
