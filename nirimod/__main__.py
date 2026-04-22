@@ -53,14 +53,14 @@ class NiriModApp(Adw.Application):
         GLib.set_application_name("NiriMod")
         GLib.set_prgname("nirimod")
 
-        # Suppress Adwaita-WARNING about mixed system dark mode settings
+        # Prefer dark theme globally via libadwaita
         settings = Gtk.Settings.get_default()
         if settings:
-            settings.set_property("gtk-application-prefer-dark-theme", False)
+            settings.set_property("gtk-application-prefer-dark-theme", True)
 
         # Prefer dark theme globally via libadwaita
         style_manager = Adw.StyleManager.get_default()
-        style_manager.set_color_scheme(Adw.ColorScheme.PREFER_DARK)
+        style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
 
     def do_activate(self):
         win = self.get_active_window()

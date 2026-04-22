@@ -35,6 +35,7 @@ headerbar,
     background-image: none;
     box-shadow: none;
     border-bottom: 1px solid @nm_border;
+    color: @window_fg_color;
 }
 
 .navigation-sidebar {
@@ -53,6 +54,7 @@ headerbar,
     margin: 1px 0;
     padding: 6px 10px;
     transition: background 150ms ease;
+    color: @window_fg_color;
 }
 
 .nm-sidebar-listbox row:hover {
@@ -123,6 +125,21 @@ row:hover {
     font-weight: 800;
     padding: 1px 7px;
     min-width: 16px;
+}
+
+.nm-search-entry {
+    color: @window_fg_color;
+    background-color: @card_bg_color;
+    border: 1px solid @nm_border;
+    border-radius: 8px;
+}
+
+.nm-search-entry > box {
+    color: @window_fg_color;
+}
+
+.nm-search-entry text {
+    color: @window_fg_color;
 }
 
 .nm-dirty-bar {
