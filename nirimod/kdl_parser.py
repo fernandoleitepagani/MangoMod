@@ -13,6 +13,7 @@ from typing import Any
 
 NIRI_CONFIG = Path.home() / ".config" / "niri" / "config.kdl"
 PROFILES_DIR = Path.home() / ".config" / "niri" / "profiles"
+BACKUP_DIR = Path.home() / ".config" / "niri" / "backup"
 
 
 class KdlRawString(str):
@@ -30,6 +31,7 @@ class KdlNode:
     leading_trivia: str = ""
     trailing_trivia: str = ""
     children_trailing_trivia: str = ""
+    source_file: Path | None = field(default=None, compare=False, repr=False)
 
     def get_child(self, name: str) -> "KdlNode | None":
         for c in self.children:
@@ -394,6 +396,81 @@ def load_niri_config() -> list[KdlNode]:
     return parse_kdl(NIRI_CONFIG.read_text())
 
 
+def _resolve_includes(
+    nodes: list[KdlNode],
+    base: Path,
+    depth: int = 0,
+) -> tuple[list[KdlNode], list[tuple[KdlNode, Path]]]:
+    # Returns (flat_nodes, include_slots). include_slots preserves the original
+    # include node + resolved path so config.kdl can be reconstructed on save.
+    flat: list[KdlNode] = []
+    slots: list[tuple[KdlNode, Path]] = []
+
+    for node in nodes:
+        if node.name != "include" or depth > 5:
+            node.source_file = base
+            flat.append(node)
+            continue
+
+        optional = node.props.get("optional", False)
+        if not node.args:
+            node.source_file = base
+            flat.append(node)
+            continue
+
+        node.source_file = base
+        target = base.parent / node.args[0]
+        slots.append((node, target))
+
+        if not target.exists():
+            if not optional:
+                import warnings
+                warnings.warn(f"nirimod: included file not found: {target}")
+            continue
+
+        included = parse_kdl(target.read_text())
+        child_flat, child_slots = _resolve_includes(included, target, depth + 1)
+        flat.extend(child_flat)
+        slots.extend(child_slots)
+
+    return flat, slots
+
+
+def load_niri_config_multi() -> tuple[list[KdlNode], list[tuple[KdlNode, Path]]]:
+    if not NIRI_CONFIG.exists():
+        return [], []
+    raw = parse_kdl(NIRI_CONFIG.read_text())
+    return _resolve_includes(raw, NIRI_CONFIG)
+
+
+def save_niri_config_multi(
+    nodes: list[KdlNode],
+    include_slots: list[tuple[KdlNode, Path]],
+) -> None:
+    # Derive the primary file (config.kdl) from the include slots rather than
+    # hardcoding NIRI_CONFIG, so this works with any config location.
+    primary = NIRI_CONFIG
+    if include_slots and include_slots[0][0].source_file is not None:
+        primary = include_slots[0][0].source_file
+
+    by_file: dict[Path, list[KdlNode]] = {}
+    config_nodes: list[KdlNode] = []
+
+    for node in nodes:
+        src = node.source_file
+        if src is None or src == primary:
+            config_nodes.append(node)
+        else:
+            by_file.setdefault(src, []).append(node)
+
+    for path, file_nodes in by_file.items():
+        path.write_text(write_kdl(file_nodes))
+
+    # Put include lines first (preserving original trivia), then config-native nodes.
+    out_nodes = [inc_node for inc_node, _ in include_slots] + config_nodes
+    primary.write_text(write_kdl(out_nodes))
+
+
 # Writer
 
 
@@ -456,7 +533,10 @@ def _write_node(node: KdlNode, indent: int = 0) -> str:
             res += " "
         res += "{"
         for child in node.children:
-            res += _write_node(child, indent + 1)
+            child_str = _write_node(child, indent + 1)
+            if res and not res[-1].isspace() and child_str and not child_str[0].isspace():
+                res += "\n"
+            res += child_str
         res += node.children_trailing_trivia
 
         if res.endswith("\n"):
@@ -475,9 +555,13 @@ def write_kdl(nodes: list[KdlNode]) -> str:
 
     res = ""
     for n in nodes:
-        res += _write_node(n)
+        node_str = _write_node(n)
         if getattr(n, "eof_trivia", None):
-            res += getattr(n, "eof_trivia")
+            node_str += getattr(n, "eof_trivia")
+            
+        if res and not res[-1].isspace() and node_str and not node_str[0].isspace():
+            res += "\n"
+        res += node_str
 
     if res and not res.endswith("\n"):
         res += "\n"

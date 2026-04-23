@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nirimod.kdl_parser import (
+    NIRI_CONFIG,
     KdlNode,
     load_niri_config,
+    load_niri_config_multi,
     parse_kdl,
     save_niri_config,
+    save_niri_config_multi,
     write_kdl,
 )
 from nirimod.undo import UndoEntry, UndoManager
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    pass
 
 
 @dataclass
@@ -33,6 +37,8 @@ class AppState:
         self._undo: UndoManager = UndoManager()
         self._runtime: RuntimeInfo = RuntimeInfo()
         self._dirty: bool = False
+        self._include_slots: list[tuple[KdlNode, Path]] = []
+        self._source_files: set[Path] = set()
 
     def load(self) -> None:
         from nirimod import niri_ipc
@@ -41,7 +47,11 @@ class AppState:
             niri_running=niri_ipc.is_niri_running(),
             has_touchpad=niri_ipc.has_touchpad(),
         )
-        self._nodes = load_niri_config()
+        self._nodes, self._include_slots = load_niri_config_multi()
+        self._source_files = {NIRI_CONFIG}
+        for _, path in self._include_slots:
+            if path.exists():
+                self._source_files.add(path)
         self._saved_kdl = write_kdl(self._nodes) if self._nodes else ""
         self._dirty = False
 
@@ -56,6 +66,18 @@ class AppState:
     @property
     def saved_kdl(self) -> str:
         return self._saved_kdl
+
+    @property
+    def source_files(self) -> set[Path]:
+        return self._source_files
+
+    @property
+    def include_slots(self) -> list[tuple[KdlNode, Path]]:
+        return self._include_slots
+
+    @property
+    def is_multi_file(self) -> bool:
+        return bool(self._include_slots)
 
     @property
     def niri_running(self) -> bool:
@@ -109,10 +131,20 @@ class AppState:
         self._dirty = False
 
     def reload_from_disk(self) -> None:
-        self._nodes = load_niri_config()
+        self._nodes, self._include_slots = load_niri_config_multi()
+        self._source_files = {NIRI_CONFIG}
+        for _, path in self._include_slots:
+            if path.exists():
+                self._source_files.add(path)
 
     def write_current_kdl(self) -> str:
         return write_kdl(self._nodes)
 
     def write_to_path(self, path: Path | None = None) -> None:
-        save_niri_config(self._nodes, path=path)
+        if path is not None:
+            # Explicit path (e.g. validation temp file) — single file write
+            save_niri_config(self._nodes, path=path)
+        elif self._include_slots:
+            save_niri_config_multi(self._nodes, self._include_slots)
+        else:
+            save_niri_config(self._nodes)

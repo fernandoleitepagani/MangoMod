@@ -30,6 +30,7 @@ def make_toolbar_page(
         menu = Gio.Menu()
         menu.append("Profiles", "win.open_profiles")
         menu.append("Preferences", "win.open_preferences")
+        menu.append("Reset to Original Backup", "win.reset_config")
         menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic")
         menu_btn.set_tooltip_text("Menu")
         menu_btn.add_css_class("flat")
