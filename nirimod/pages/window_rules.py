@@ -382,7 +382,6 @@ class WindowRulesPage(BasePage):
             if blur_row.get_active():
                 be = KdlNode("background-effect")
                 blur_child = KdlNode("blur")
-                blur_child.args = [True]
                 be.children.append(blur_child)
                 new_rule.children.append(be)
 
@@ -402,12 +401,14 @@ class WindowRulesPage(BasePage):
                     cn.args = [v]
                     new_rule.children.append(cn)
 
-            if rule_idx >= 0:
-                rules = self._get_rules()
-                if 0 <= rule_idx < len(rules):
-                    i = self._nodes.index(rules[rule_idx])
-                    self._nodes[i] = new_rule
+            rules = self._get_rules()
+            if rule_idx >= 0 and 0 <= rule_idx < len(rules):
+                i = self._nodes.index(rules[rule_idx])
+                new_rule.source_file = rules[rule_idx].source_file
+                self._nodes[i] = new_rule
             else:
+                if rules:
+                    new_rule.source_file = rules[-1].source_file
                 self._nodes.append(new_rule)
 
             self._commit("window rule")
@@ -565,7 +566,6 @@ class WindowRulesPage(BasePage):
             if blur_row.get_active():
                 be = KdlNode("background-effect")
                 bc = KdlNode("blur")
-                bc.args = [True]
                 be.children.append(bc)
                 new_rule.children.append(be)
             op = op_row.get_value()
@@ -577,8 +577,13 @@ class WindowRulesPage(BasePage):
             rules = self._get_layer_rules()
             if idx >= 0 and 0 <= idx < len(rules):
                 i = self._nodes.index(rules[idx])
+                new_rule.source_file = rules[idx].source_file
                 self._nodes[i] = new_rule
             else:
+                if rules:
+                    new_rule.source_file = rules[-1].source_file
+                elif self._get_rules():
+                    new_rule.source_file = self._get_rules()[-1].source_file
                 self._nodes.append(new_rule)
             self._commit("layer rule")
             self._rebuild_layer()

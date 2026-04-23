@@ -17,6 +17,13 @@ from nirimod.kdl_parser import (
 )
 from nirimod.pages.base import BasePage, make_toolbar_page
 
+_CORNERS = [
+    ("top-left",     "Top-Left",     "Moves cursor to the top-left corner"),
+    ("top-right",    "Top-Right",    "Moves cursor to the top-right corner"),
+    ("bottom-left",  "Bottom-Left",  "Moves cursor to the bottom-left corner"),
+    ("bottom-right", "Bottom-Right", "Moves cursor to the bottom-right corner"),
+]
+
 
 class GesturesPage(BasePage):
     def build(self) -> Gtk.Widget:
@@ -29,20 +36,61 @@ class GesturesPage(BasePage):
         content = self._content
         nodes = self._nodes
 
+        # ── Hot Corners ───────────────────────────────────────────────────────
         hc_grp = Adw.PreferencesGroup(
             title="Hot Corners",
-            description="Trigger actions when the cursor touches a screen corner",
+            description="Trigger the overview when the cursor touches a screen corner (niri ≥ 25.05)",
         )
-        gestures_node = find_or_create(nodes, "gestures")
-        hc_node = gestures_node.get_child("hot-corners")
+        gestures_node = next((n for n in nodes if n.name == "gestures"), None)
+        hc_node = gestures_node.get_child("hot-corners") if gestures_node else None
         hc_off = hc_node is not None and hc_node.get_child("off") is not None
+        hc_enabled = not hc_off
 
-        hc_row = Adw.SwitchRow(title="Enable Hot Corners")
-        hc_row.set_active(not hc_off)
-        safe_switch_connect(hc_row, not hc_off, self._set_hot_corners)
-        hc_grp.add(hc_row)
+        # Which individual corners are active
+        active_corners: set[str] = set()
+        if hc_node and not hc_off:
+            for corner_key, _, _ in _CORNERS:
+                if hc_node.get_child(corner_key) is not None:
+                    active_corners.add(corner_key)
+
+        # ExpanderRow = the enable/disable switch + collapsible corner list
+        hc_expander = Adw.ExpanderRow(
+            title="Enable Hot Corners",
+            subtitle="Expand to choose which corners are active (default: top-left)",
+        )
+        hc_expander.set_expanded(hc_enabled)
+        hc_expander.set_show_enable_switch(True)
+        hc_expander.set_enable_expansion(hc_enabled)
+
+        # Per-corner rows nested inside the expander
+        corner_rows: dict[str, Adw.SwitchRow] = {}
+        for corner_key, corner_label, corner_subtitle in _CORNERS:
+            sr = Adw.SwitchRow(title=corner_label, subtitle=corner_subtitle)
+            is_active = corner_key in active_corners
+            sr.set_active(is_active)
+            safe_switch_connect(
+                sr, is_active,
+                lambda enabled, k=corner_key: self._set_corner(k, enabled),
+            )
+            hc_expander.add_row(sr)
+            corner_rows[corner_key] = sr
+
+        # Wire the expander's enable-switch to the hot corners on/off mutation
+        hc_expander._last_enabled = hc_enabled
+
+        def _on_expander_toggled(expander, _param):
+            val = expander.get_enable_expansion()
+            if val != getattr(expander, "_last_enabled", None):
+                expander._last_enabled = val
+                self._set_hot_corners(val)
+
+        hc_expander.connect("notify::enable-expansion", _on_expander_toggled)
+
+        hc_grp.add(hc_expander)
         content.append(hc_grp)
 
+
+        # ── Hotkey Overlay ────────────────────────────────────────────────────
         hko_grp = Adw.PreferencesGroup(title="Hotkey Overlay")
         hko_node = next((n for n in nodes if n.name == "hotkey-overlay"), None)
 
@@ -58,6 +106,7 @@ class GesturesPage(BasePage):
         hko_grp.add(skip_row)
         content.append(hko_grp)
 
+        # ── Screenshots ───────────────────────────────────────────────────────
         ss_grp = Adw.PreferencesGroup(
             title="Screenshots", description="Path template for saved screenshots"
         )
@@ -72,9 +121,10 @@ class GesturesPage(BasePage):
         ss_grp.add(path_row)
         content.append(ss_grp)
 
+        # ── Overview ──────────────────────────────────────────────────────────
         ov_grp = Adw.PreferencesGroup(title="Overview")
-        ov_node = find_or_create(nodes, "overview")
-        ws_shadow_node = ov_node.get_child("workspace-shadow")
+        ov_node = next((n for n in nodes if n.name == "overview"), None)
+        ws_shadow_node = ov_node.get_child("workspace-shadow") if ov_node else None
 
         ws_shadow_initial = (
             ws_shadow_node is None or ws_shadow_node.get_child("off") is None
@@ -90,14 +140,29 @@ class GesturesPage(BasePage):
         ov_grp.add(ws_shadow_row)
         content.append(ov_grp)
 
-    def _set_hot_corners(self, enabled: bool):
+    # ── Mutation methods ──────────────────────────────────────────────────────
+
+    def _get_hot_corners_node(self) -> KdlNode:
         gestures = find_or_create(self._nodes, "gestures")
         hc = gestures.get_child("hot-corners")
         if hc is None:
             hc = KdlNode("hot-corners")
+            hc.leading_trivia = "\n"
             gestures.children.append(hc)
+        return hc
+
+    def _set_hot_corners(self, enabled: bool):
+        hc = self._get_hot_corners_node()
         set_node_flag(hc, "off", not enabled)
         self._commit("gestures hot-corners")
+
+    def _set_corner(self, corner_key: str, enabled: bool):
+        """Enable or disable an individual hot corner (niri ≥ 25.11)."""
+        hc = self._get_hot_corners_node()
+        # Remove 'off' if it exists — enabling a corner implicitly enables hot corners
+        set_node_flag(hc, "off", False)
+        set_node_flag(hc, corner_key, enabled)
+        self._commit(f"hot-corner {corner_key}")
 
     def _set_skip_hotkey_overlay(self, skip: bool):
         nodes = self._nodes

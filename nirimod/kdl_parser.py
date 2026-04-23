@@ -519,17 +519,18 @@ def _write_node(node: KdlNode, indent: int = 0) -> str:
 
     res += " ".join(parts)
 
-    if node.trailing_trivia:
-        if not node.trailing_trivia[
-            0
-        ].isspace() and not node.trailing_trivia.startswith("\n"):
-            res += " "
-        res += node.trailing_trivia
-
     if node.children:
-        if not node.trailing_trivia or (
-            not res.endswith(" ") and not res.endswith("\n")
-        ):
+        # When a node has children, emit trailing_trivia only if it's an
+        # inline comment (not a bare newline). A bare newline would produce
+        # `node\n{` which is invalid KDL.
+        tt = node.trailing_trivia
+        if tt and not tt.strip().startswith("//") and not tt.strip().startswith("/*"):
+            tt = ""  # suppress bare whitespace/newline before '{'
+        if tt:
+            if not tt[0].isspace() and not tt.startswith("\n"):
+                res += " "
+            res += tt
+        if not tt or (not res.endswith(" ") and not res.endswith("\n")):
             res += " "
         res += "{"
         for child in node.children:
@@ -538,10 +539,20 @@ def _write_node(node: KdlNode, indent: int = 0) -> str:
                 res += "\n"
             res += child_str
         res += node.children_trailing_trivia
-
+        # Always ensure a newline before the closing '}' so that programmatically
+        # inserted children (which may have empty children_trailing_trivia on the
+        # parent) don't produce '}}' on the same line.
+        if not res.endswith("\n"):
+            res += "\n"
         if res.endswith("\n"):
             res += pad
         res += "}"
+    elif node.trailing_trivia:
+        if not node.trailing_trivia[
+            0
+        ].isspace() and not node.trailing_trivia.startswith("\n"):
+            res += " "
+        res += node.trailing_trivia
 
     if not node.children and not node.trailing_trivia:
         res += "\n"
@@ -628,7 +639,9 @@ def set_node_flag(parent: KdlNode, flag_name: str, enabled: bool) -> None:
             idx, node = cache[flag_name]
             parent.children.insert(min(idx, len(parent.children)), node)
         else:
-            parent.children.insert(0, KdlNode(name=flag_name))
+            new_node = KdlNode(name=flag_name)
+            new_node.leading_trivia = "\n"
+            parent.children.insert(0, new_node)
     elif not enabled and existing is not None:
         if not hasattr(parent, "_removed_children"):
             parent._removed_children = {}
