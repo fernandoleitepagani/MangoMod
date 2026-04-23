@@ -520,21 +520,19 @@ def _write_node(node: KdlNode, indent: int = 0) -> str:
     res += " ".join(parts)
 
     if node.children:
-        # When a node has children, emit trailing_trivia only if it's an
-        # inline comment (not a bare newline). A bare newline would produce
-        # `node\n{` which is invalid KDL.
+        if not res.endswith(" "):
+            res += " "
+        res += "{"
+
         tt = node.trailing_trivia
-        if tt and not tt.strip().startswith("//") and not tt.strip().startswith("/*"):
-            tt = ""  # suppress bare whitespace/newline before '{'
         if tt:
             if not tt[0].isspace() and not tt.startswith("\n"):
                 res += " "
             res += tt
-        if not tt or (not res.endswith(" ") and not res.endswith("\n")):
-            res += " "
-        res += "{"
+
         for child in node.children:
             child_str = _write_node(child, indent + 1)
+            # Ensure children start on new lines if they are indented or follow a newline
             if res and not res[-1].isspace() and child_str and not child_str[0].isspace():
                 res += "\n"
             res += child_str
@@ -547,14 +545,13 @@ def _write_node(node: KdlNode, indent: int = 0) -> str:
         if res.endswith("\n"):
             res += pad
         res += "}"
+
     elif node.trailing_trivia:
-        if not node.trailing_trivia[
-            0
-        ].isspace() and not node.trailing_trivia.startswith("\n"):
+        if not node.trailing_trivia[0].isspace() and not node.trailing_trivia.startswith("\n"):
             res += " "
         res += node.trailing_trivia
 
-    if not node.children and not node.trailing_trivia:
+    if not res.endswith("\n"):
         res += "\n"
 
     return res

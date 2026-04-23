@@ -53,10 +53,6 @@ class NiriModApp(Adw.Application):
         GLib.set_application_name("NiriMod")
         GLib.set_prgname("nirimod")
 
-        # Prefer dark theme globally via libadwaita
-        settings = Gtk.Settings.get_default()
-        if settings:
-            settings.set_property("gtk-application-prefer-dark-theme", True)
 
         # Prefer dark theme globally via libadwaita
         style_manager = Adw.StyleManager.get_default()
