@@ -7,6 +7,8 @@ find/replace rather than a full AST round-trip.
 
 from __future__ import annotations
 
+import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -401,24 +403,31 @@ def _resolve_includes(
     base: Path,
     depth: int = 0,
 ) -> tuple[list[KdlNode], list[tuple[KdlNode, Path]]]:
-    # Returns (flat_nodes, include_slots). include_slots preserves the original
-    # include node + resolved path so config.kdl can be reconstructed on save.
+    # Flatten all included files into a single node list, tracking which file
+    # each node came from (source_file) and its original position in the primary
+    # config (_primary_order) so we can put it back in the right place on save.
     flat: list[KdlNode] = []
     slots: list[tuple[KdlNode, Path]] = []
 
-    for node in nodes:
+    for i, node in enumerate(nodes):
         if node.name != "include" or depth > 5:
             node.source_file = base
+            if depth == 0:
+                node._primary_order = i  # type: ignore[attr-defined]
             flat.append(node)
             continue
 
         optional = node.props.get("optional", False)
         if not node.args:
             node.source_file = base
+            if depth == 0:
+                node._primary_order = i  # type: ignore[attr-defined]
             flat.append(node)
             continue
 
         node.source_file = base
+        if depth == 0:
+            node._primary_order = i  # type: ignore[attr-defined]
         target = base.parent / node.args[0]
         slots.append((node, target))
 
@@ -443,15 +452,44 @@ def load_niri_config_multi() -> tuple[list[KdlNode], list[tuple[KdlNode, Path]]]
     return _resolve_includes(raw, NIRI_CONFIG)
 
 
+def _atomic_write(path: Path, content: str) -> None:
+    # Skip if nothing changed — avoids triggering niri's config watcher
+    # for files that we touched but didn't actually modify.
+    if path.exists() and path.read_text() == content:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".nirimod_tmp_")
+    try:
+        os.write(fd, content.encode())
+        os.close(fd)
+        os.replace(tmp, path)
+    except Exception:
+        os.close(fd)
+        os.unlink(tmp)
+        raise
+
+
 def save_niri_config_multi(
     nodes: list[KdlNode],
     include_slots: list[tuple[KdlNode, Path]],
 ) -> None:
-    # Derive the primary file (config.kdl) from the include slots rather than
-    # hardcoding NIRI_CONFIG, so this works with any config location.
+    # Figure out which file is the "main" one. Normally config.kdl, but we
+    # read it from the slots so we're not hardcoded to a specific path.
     primary = NIRI_CONFIG
     if include_slots and include_slots[0][0].source_file is not None:
         primary = include_slots[0][0].source_file
+
+    # If a node was just created (source_file=None), try to route it to the
+    # same file as existing nodes of the same type. That way a new window-rule
+    # goes to rules.kdl, a new spawn-at-startup goes to startup.kdl, etc.
+    # Genuinely new node types with no existing home fall back to config.kdl.
+    name_to_file: dict[str, Path] = {}
+    for node in nodes:
+        if node.source_file is not None and node.source_file != primary:
+            name_to_file.setdefault(node.name, node.source_file)
+    for node in nodes:
+        if node.source_file is None:
+            node.source_file = name_to_file.get(node.name)
 
     by_file: dict[Path, list[KdlNode]] = {}
     config_nodes: list[KdlNode] = []
@@ -464,11 +502,19 @@ def save_niri_config_multi(
             by_file.setdefault(src, []).append(node)
 
     for path, file_nodes in by_file.items():
-        path.write_text(write_kdl(file_nodes))
+        _atomic_write(path, write_kdl(file_nodes))
 
-    # Put include lines first (preserving original trivia), then config-native nodes.
-    out_nodes = [inc_node for inc_node, _ in include_slots] + config_nodes
-    primary.write_text(write_kdl(out_nodes))
+    # Rebuild config.kdl in the original node order (include lines stay where
+    # the user put them rather than getting hoisted to the top).
+    _LARGE = 10 ** 9
+    primary_items: list[tuple[int, KdlNode]] = []
+    for inc_node, _ in include_slots:
+        primary_items.append((getattr(inc_node, "_primary_order", _LARGE), inc_node))
+    for node in config_nodes:
+        primary_items.append((getattr(node, "_primary_order", _LARGE), node))
+    primary_items.sort(key=lambda x: x[0])
+
+    _atomic_write(primary, write_kdl([n for _, n in primary_items]))
 
 
 # Writer
@@ -497,6 +543,43 @@ def _val_to_kdl(v: Any) -> str:
     return str(v)
 
 
+def _is_inline_node(node: KdlNode) -> bool:
+    # True if the node was originally written as a one-liner: `name { child; }`
+    # We detect this by checking that nothing inside the block has a newline.
+    if not node.children:
+        return False
+    if "\n" in node.trailing_trivia:
+        return False
+    for child in node.children:
+        if "\n" in child.leading_trivia or "\n" in child.trailing_trivia:
+            return False
+        if child.children and not _is_inline_node(child):
+            return False
+    if "\n" in node.children_trailing_trivia:
+        return False
+    return True
+
+
+def _write_node_inline(node: KdlNode) -> str:
+    # Renders a node as a compact one-liner with no trivia or indentation.
+    if isinstance(node.name, KdlRawString):
+        name_str = _val_to_kdl(node.name)
+    else:
+        name_str = f'"{node.name}"' if " " in node.name else node.name
+
+    parts = [name_str]
+    for a in node.args:
+        parts.append(_val_to_kdl(a))
+    for k, v in node.props.items():
+        parts.append(f"{k}={_val_to_kdl(v)}")
+
+    res = " ".join(parts)
+    if node.children:
+        children_str = " ".join(f"{_write_node_inline(c)};" for c in node.children)
+        res += f" {{ {children_str} }}"
+    return res
+
+
 def _write_node(node: KdlNode, indent: int = 0) -> str:
     res = node.leading_trivia
 
@@ -520,31 +603,54 @@ def _write_node(node: KdlNode, indent: int = 0) -> str:
     res += " ".join(parts)
 
     if node.children:
-        if not res.endswith(" "):
-            res += " "
-        res += "{"
-
-        tt = node.trailing_trivia
-        if tt:
-            if not tt[0].isspace() and not tt.startswith("\n"):
+        if _is_inline_node(node):
+            # Keep the original pre-brace spacing (e.g. `Mod+B      {`) so
+            # any column-aligned keybind blocks stay aligned.
+            pre_brace = node.trailing_trivia if node.trailing_trivia else " "
+            if not pre_brace[0].isspace():
+                pre_brace = " " + pre_brace
+            children_str = " ".join(f"{_write_node_inline(c)};" for c in node.children)
+            res += f"{pre_brace}{{ {children_str} }}"
+        else:
+            if not res.endswith(" "):
                 res += " "
-            res += tt
+            res += "{"
 
-        for child in node.children:
-            child_str = _write_node(child, indent + 1)
-            # Ensure children start on new lines if they are indented or follow a newline
-            if res and not res[-1].isspace() and child_str and not child_str[0].isspace():
+            tt = node.trailing_trivia
+            # trailing_trivia here is the space that was *before* the '{', not after.
+            # Re-emitting it after the brace created `cursor { ` (trailing space).
+            # Only emit if it has real content like a comment or newline.
+            if tt and (not tt.isspace() or "\n" in tt):
+                if not tt[0].isspace() and not tt.startswith("\n"):
+                    res += " "
+                res += tt
+
+            for child in node.children:
+                child_str = _write_node(child, indent + 1)
+                if res and not res[-1].isspace() and child_str and not child_str[0].isspace():
+                    res += "\n"
+                res += child_str
+
+            # children_trailing_trivia is usually just indentation whitespace before '}'.
+            # We reconstruct that ourselves via pad, so only emit it when it has
+            # real content (e.g. a trailing comment).
+            ctt = node.children_trailing_trivia
+            if ctt and (not ctt.isspace() or "\n" in ctt):
+                lines = ctt.splitlines(keepends=True)
+                while lines and lines[-1].strip() == "":
+                    lines.pop()
+                ctt_trimmed = "".join(lines)
+                if ctt_trimmed:
+                    res += ctt_trimmed
+                    if not res.endswith("\n"):
+                        res += "\n"
+            if not res.endswith("\n"):
                 res += "\n"
-            res += child_str
-        res += node.children_trailing_trivia
-        # Always ensure a newline before the closing '}' so that programmatically
-        # inserted children (which may have empty children_trailing_trivia on the
-        # parent) don't produce '}}' on the same line.
-        if not res.endswith("\n"):
-            res += "\n"
-        if res.endswith("\n"):
             res += pad
-        res += "}"
+            res += "}"
+
+        # Don't tack on a '\n' — the next node's leading_trivia starts with one.
+        return res
 
     elif node.trailing_trivia:
         if not node.trailing_trivia[0].isspace() and not node.trailing_trivia.startswith("\n"):
