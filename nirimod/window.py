@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -10,7 +11,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango
 
 from nirimod import niri_ipc
-from nirimod.kdl_parser import NIRI_CONFIG
+from nirimod.kdl_parser import BACKUP_DIR, NIRI_CONFIG
 from nirimod.state import AppState
 from nirimod import profiles as prof_mod
 from nirimod.theme import CSS
@@ -522,6 +523,10 @@ class NiriModWindow(Adw.ApplicationWindow):
         open_prefs_action.connect("activate", lambda *_: self._open_preferences())
         self.add_action(open_prefs_action)
 
+        reset_config_action = Gio.SimpleAction.new("reset_config", None)
+        reset_config_action.connect("activate", lambda *_: self._on_reset_config_clicked())
+        self.add_action(reset_config_action)
+
     def get_nodes(self):
         return self.app_state.nodes
 
@@ -553,37 +558,54 @@ class NiriModWindow(Adw.ApplicationWindow):
 
     def _on_save(self):
         new_kdl = self.app_state.write_current_kdl()
+        if self.app_state.is_multi_file:
+            # Snapshot all source files before touching them
+            snapshots = {
+                p: p.read_text() for p in self.app_state.source_files if p.exists()
+            }
+            self.app_state.write_to_path()
 
-        tmp_kdl = NIRI_CONFIG.with_name(".config.kdl.tmp")
-        self.app_state.write_to_path(tmp_kdl)
+            def _on_validated(result):
+                ok, msg = result
+                if not ok:
+                    # Restore all files from snapshots
+                    for p, text in snapshots.items():
+                        p.write_text(text)
+                    self.show_toast(f"Validation error: {msg}", timeout=8)
+                    return
+                self.app_state.commit_save(new_kdl)
+                raw = self._pages.get("raw_config")
+                if raw and hasattr(raw, "refresh"):
+                    raw.refresh()
+                    self._build_search_index()
+                self.mark_clean()
+                self.show_toast("Config saved and applied ✓", timeout=3)
 
-        def _on_validated(result):
-            ok, msg = result
-            if not ok:
-                # Don't discard the user's work — just report the error and
-                # let them fix and retry.
-                self.show_toast(f"Validation error: {msg}", timeout=8)
-                tmp_kdl.unlink(missing_ok=True)
-                return
+            niri_ipc.run_in_thread(
+                lambda: niri_ipc.validate_config(), _on_validated
+            )
+        else:
+            tmp_kdl = NIRI_CONFIG.with_name(".config.kdl.tmp")
+            self.app_state.write_to_path(tmp_kdl)
 
-            # Move tmp to main config
-            import shutil
+            def _on_validated(result):
+                ok, msg = result
+                if not ok:
+                    self.show_toast(f"Validation error: {msg}", timeout=8)
+                    tmp_kdl.unlink(missing_ok=True)
+                    return
+                shutil.move(tmp_kdl, NIRI_CONFIG)
+                self.app_state.commit_save(new_kdl)
+                raw = self._pages.get("raw_config")
+                if raw and hasattr(raw, "refresh"):
+                    raw.refresh()
+                    self._build_search_index()
+                self.mark_clean()
+                self.show_toast("Config saved and applied ✓", timeout=3)
 
-            shutil.move(tmp_kdl, NIRI_CONFIG)
-
-            self.app_state.commit_save(new_kdl)
-            # Refresh raw config page first, then mark clean to avoid
-            # any refresh inadvertently re-showing the dirty bar
-            raw = self._pages.get("raw_config")
-            if raw and hasattr(raw, "refresh"):
-                raw.refresh()
-                self._build_search_index()
-            self.mark_clean()
-            self.show_toast("Config saved and applied ✓", timeout=3)
-
-        niri_ipc.run_in_thread(
-            lambda: niri_ipc.validate_config(str(tmp_kdl)), _on_validated
-        )
+            niri_ipc.run_in_thread(
+                lambda: niri_ipc.validate_config(str(tmp_kdl)), _on_validated
+            )
 
     def _on_discard(self):
         self.app_state.discard()
@@ -620,19 +642,19 @@ class NiriModWindow(Adw.ApplicationWindow):
         self._toast_overlay.add_toast(toast)
 
     def _check_onboarding(self):
-        backup_kdl = NIRI_CONFIG.with_suffix(".kdl.bak")
-        if backup_kdl.exists():
+        sentinel = BACKUP_DIR / "config.kdl"
+        if sentinel.exists():
             return
 
-        # Show dialog
-        dialog = Adw.AlertDialog(
-            heading="Welcome to NiriMod",
-            body=(
-                "NiriMod directly edits your main <b>config.kdl</b> file.\n\n"
-                "Before proceeding, you should back up your current configuration to\n"
-                "<tt>~/.config/niri/config.kdl.bak</tt>.\n"
-            ),
+        source_files = sorted(self.app_state.source_files)
+        filenames = "\n".join(f"  • <tt>{p.name}</tt>" for p in source_files)
+        body = (
+            f"NiriMod will back up your config files to\n"
+            f"<tt>~/.config/niri/backup/</tt>:\n\n"
+            f"{filenames}\n"
         )
+
+        dialog = Adw.AlertDialog(heading="Welcome to NiriMod", body=body)
         dialog.set_body_use_markup(True)
         dialog.add_response("cancel", "Not Now")
         dialog.add_response("accept", "Create Backup")
@@ -649,7 +671,7 @@ class NiriModWindow(Adw.ApplicationWindow):
     def _on_update_check_result(self, remote_sha: str | None, commit_msg: str | None):
         if remote_sha is None:
             return
-            
+
         dialog = Adw.AlertDialog(
             heading="Update Available",
             body=f"A new version of NiriMod is available on GitHub!\n\n<b>Latest Commit:</b>\n{GLib.markup_escape_text(commit_msg or '')}",
@@ -658,7 +680,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         dialog.add_response("cancel", "Later")
         dialog.add_response("update", "Update in Terminal")
         dialog.set_response_appearance("update", Adw.ResponseAppearance.SUGGESTED)
-        
+
         def _on_response(dlg, response):
             if response == "update":
                 from nirimod import updater
@@ -670,17 +692,45 @@ class NiriModWindow(Adw.ApplicationWindow):
         dialog.present(self)
 
     def _on_onboarding_response(self, dialog, response):
-        if response == "accept":
-            try:
-                if NIRI_CONFIG.exists():
-                    import shutil
+        if response != "accept":
+            return
+        try:
+            BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+            for p in self.app_state.source_files:
+                if p.exists():
+                    shutil.copy2(p, BACKUP_DIR / p.name)
+            self.show_toast("Backup created in ~/.config/niri/backup/ ✓")
+        except Exception as e:
+            self.show_toast(f"Backup failed: {e}", timeout=6)
 
-                    shutil.copy2(NIRI_CONFIG, NIRI_CONFIG.with_suffix(".kdl.bak"))
-                    self.show_toast("Backup created successfully ✓")
-                else:
-                    self.show_toast("config.kdl not found, skipping backup", timeout=6)
-            except Exception as e:
-                self.show_toast(f"Failed: {e}", timeout=6)
+    def _on_reset_config_clicked(self, _btn=None):
+        if not BACKUP_DIR.exists():
+            self.show_toast("No backup to restore from.")
+            return
+
+        dialog = Adw.AlertDialog(
+            heading="Reset to backup?",
+            body="Your current config will be replaced with the original backup and the backup folder will be deleted. This can't be undone."
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("reset", "Reset")
+        dialog.set_response_appearance("reset", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.connect("response", lambda dlg, r: self._perform_reset_to_backup() if r == "reset" else None)
+        dialog.present(self)
+
+    def _perform_reset_to_backup(self):
+        try:
+            for f in BACKUP_DIR.iterdir():
+                if f.is_file():
+                    shutil.copy2(f, NIRI_CONFIG.parent / f.name)
+            shutil.rmtree(BACKUP_DIR)
+            self.app_state.reload_from_disk()
+            self.notify_nodes_changed()
+            self.mark_clean()
+            self.show_toast("Config reset to backup ✓")
+            self._check_onboarding()
+        except Exception as e:
+            self.show_toast(f"Reset failed: {e}", timeout=6)
 
     def _open_preferences(self):
         from nirimod import app_settings
@@ -765,7 +815,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         name = name.strip()
         if not name:
             return
-        prof_mod.save_profile(name)
+        prof_mod.save_profile(name, source_files=self.app_state.source_files)
         self.show_toast(f"Profile '{name}' saved ✓")
 
     def _load_profile(self, name: str, dialog):

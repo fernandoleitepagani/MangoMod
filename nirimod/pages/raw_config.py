@@ -8,7 +8,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, GLib, Pango
+from gi.repository import Adw, Gtk, GLib, Pango, Gio
 
 from nirimod import niri_ipc
 from nirimod.kdl_parser import NIRI_CONFIG
@@ -20,47 +20,39 @@ class RawConfigPage(BasePage):
         tb, header, _, content = self._make_toolbar_page("Raw Config")
         self._content = content
         
-        # Action Bar
-        action_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        action_bar.set_margin_bottom(16)
+        # File selector (replaces the window title)
+        self._current_files = []
+        self._file_dropdown = Gtk.DropDown()
+        self._file_dropdown.set_valign(Gtk.Align.CENTER)
+        self._file_dropdown.connect("notify::selected-item", self._on_file_selected)
         
-        # Validate button
-        validate_btn = Gtk.Button(label="Validate", icon_name="emblem-ok-symbolic")
-        validate_btn.add_css_class("pill")
+        # Wrap dropdown in a box to act as title widget
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        title_box.set_halign(Gtk.Align.CENTER)
+        
+        title_label = Gtk.Label(label="<b>File:</b>", use_markup=True)
+        title_box.append(title_label)
+        title_box.append(self._file_dropdown)
+        
+        # File selector goes to pack_start
+        header.pack_start(title_box)
+
+        # Header Actions
+        validate_btn = Gtk.Button(label="Validate")
         validate_btn.add_css_class("suggested-action")
         validate_btn.connect("clicked", self._on_validate)
-        action_bar.append(validate_btn)
+        header.pack_end(validate_btn)
         
-        # Open in Editor button
-        open_btn = Gtk.Button(label="Open Editor", icon_name="document-open-symbolic")
-        open_btn.add_css_class("pill")
-        open_btn.connect("clicked", self._on_open_editor)
-        action_bar.append(open_btn)
-        
-        # Refresh button
-        refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic")
-        refresh_btn.add_css_class("pill")
-        refresh_btn.set_tooltip_text("Reload config from disk")
-        refresh_btn.connect("clicked", lambda *_: self.refresh())
-        action_bar.append(refresh_btn)
-        
-        # Copy button
-        copy_btn = Gtk.Button(icon_name="edit-copy-symbolic")
-        copy_btn.add_css_class("pill")
-        copy_btn.set_tooltip_text("Copy to clipboard")
+
+        copy_btn = Gtk.Button(icon_name="edit-copy-symbolic", tooltip_text="Copy")
         copy_btn.connect("clicked", self._on_copy)
-        action_bar.append(copy_btn)
+        header.pack_end(copy_btn)
 
-        # Status spacer
-        action_bar.append(Gtk.Box(hexpand=True))
+        refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Refresh")
+        refresh_btn.connect("clicked", lambda *_: self.refresh())
+        header.pack_end(refresh_btn)
 
-        self._status_lbl = Gtk.Label(label="")
-        self._status_lbl.set_xalign(1.0)
-        self._status_lbl.add_css_class("dim-label")
-        action_bar.append(self._status_lbl)
-
-        content.append(action_bar)
-
+        # Code Editor View
         self._textview = Gtk.TextView()
         self._textview.set_editable(False)
         self._textview.set_monospace(True)
@@ -72,6 +64,7 @@ class RawConfigPage(BasePage):
         self._textview.add_css_class("code-editor")
 
         scroll2 = Gtk.ScrolledWindow()
+        scroll2.add_css_class("card") # Make the editor look like a card
         scroll2.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroll2.set_vexpand(True)
         scroll2.set_hexpand(True)
@@ -82,17 +75,35 @@ class RawConfigPage(BasePage):
         return tb
 
     def refresh(self):
-        path = NIRI_CONFIG
+        state = self._win.app_state
 
-        if path.exists():
-            text = path.read_text()
+        if state.is_multi_file:
+            self._current_files = sorted(list(state.source_files))
+            if NIRI_CONFIG in self._current_files:
+                self._current_files.remove(NIRI_CONFIG)
+                self._current_files.insert(0, NIRI_CONFIG)
         else:
-            text = f"// File not found: {path}"
+            self._current_files = [NIRI_CONFIG]
 
+        strings = [p.name for p in self._current_files]
+        self._file_dropdown.set_model(Gtk.StringList.new(strings))
+        
+        self._load_selected_file()
+
+    def _on_file_selected(self, dropdown, param):
+        self._load_selected_file()
+
+    def _load_selected_file(self):
+        idx = self._file_dropdown.get_selected()
+        if idx == Gtk.INVALID_LIST_POSITION or idx >= len(self._current_files):
+            return
+
+        path = self._current_files[idx]
+        text = path.read_text() if path.exists() else f"// File not found: {path}"
+        
         buf = self._textview.get_buffer()
         buf.set_text(text)
         self._apply_syntax_highlighting(buf, text)
-        self._status_lbl.set_label(str(path))
 
     def _apply_syntax_highlighting(self, buf: Gtk.TextBuffer, text: str):
         """Simple KDL syntax highlighting using text tags."""
@@ -125,32 +136,18 @@ class RawConfigPage(BasePage):
         _apply(r"\b(true|false|null)\b", keyword_tag)
         _apply(r"^(\s*)([a-zA-Z][\w\-]*)", node_tag, group=2)
 
-    def _on_open_editor(self, *_):
-        try:
-            subprocess.Popen(["xdg-open", str(NIRI_CONFIG)])
-        except Exception as e:
-            self.show_toast(f"Failed to open editor: {e}")
-
     def _on_copy(self, *_):
         buf = self._textview.get_buffer()
         text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
         cb = self._textview.get_clipboard()
-        cb.set_text(text)
+        cb.set(text)
         self.show_toast("Config copied to clipboard", timeout=2)
 
     def _on_validate(self, *_):
-        self._status_lbl.set_label("Validating...")
+        self.show_toast("Validating...")
 
         def _on_validated(result):
             ok, msg = result
-            if ok:
-                self._status_lbl.set_markup(
-                    '<span color="#4caf50">✓  Config is valid</span>'
-                )
-            else:
-                self._status_lbl.set_markup(
-                    f'<span color="#f44336">✗  {GLib.markup_escape_text(msg)}</span>'
-                )
             self.show_toast(msg[:120], timeout=5)
 
         niri_ipc.run_in_thread(

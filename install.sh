@@ -145,6 +145,7 @@ resolve_deps() {
     esac
   fi
 
+
   if ! cmd_exists curl; then
     case "$PM" in
       pacman) MISSING+=("curl") ;;
@@ -306,29 +307,6 @@ download_source() {
   success "Source code is ready."
 }
 
-# Install from Local Directory
-copy_local_source() {
-  step "Copying Local Source"
-  local src_dir
-  src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  info "Source directory: $src_dir"
-  info "Installing to:    $INSTALL_DIR"
-
-  if [ "$src_dir" = "$INSTALL_DIR" ]; then
-    info "Already running from install location — skipping copy."
-    return
-  fi
-
-  mkdir -p "$INSTALL_DIR"
-  rsync -a --delete \
-    --exclude='.git' \
-    --exclude='.venv' \
-    --exclude='__pycache__' \
-    --exclude='*.pyc' \
-    "$src_dir/" "$INSTALL_DIR/"
-  success "Local source copied to $INSTALL_DIR."
-}
-
 # Build & Wire Up
 install_app() {
   step "Setting Up Python Environment"
@@ -379,8 +357,9 @@ if [ ! -d "\$INSTALL_DIR" ]; then
     exit 1
 fi
 export PATH="\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH"
+export PYTHONPATH="\$INSTALL_DIR"
 cd "\$INSTALL_DIR"
-exec uv run python -m nirimod "\$@"
+exec uv run python3 -m nirimod "\$@"
 EOF
   chmod +x "$BIN_DIR/nirimod"
   success "Launcher created: $BIN_DIR/nirimod"
@@ -426,17 +405,27 @@ EOF
   fi
   success "Desktop entry installed."
 
-  # PATH reminder
   if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo ""
-    warn "$BIN_DIR is not in your PATH."
-    warn "Add this to your shell config (~/.bashrc, ~/.zshrc, ~/.profile, etc.):"
-    echo -e "\n    ${CYAN}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}\n"
+    warn "$BIN_DIR isn't in your PATH."
+    if ask "Add it to your shell profile automatically?"; then
+      for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+        if [ -f "$rc" ]; then
+          if ! grep -q 'export PATH=.*\.local/bin' "$rc"; then
+            echo -e '\n# nirimod' >> "$rc"
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$rc"
+            success "Patched $rc"
+          fi
+        fi
+      done
+    else
+      warn "You can run it directly: ~/.local/bin/nirimod"
+    fi
   fi
 
   echo ""
   success "${BOLD}NiriMod ${VERSION} installed successfully!${NC}"
-  info "Launch from your app menu, or run: ${CYAN}nirimod${NC}"
+  info "Launch from your app menu, or run: ${CYAN}~/.local/bin/nirimod${NC}"
 }
 
 # Uninstall
@@ -473,8 +462,7 @@ main_menu() {
     print_banner
     echo -e "  Please select an option:\n"
     echo -e "    ${GREEN}1${NC}) Install / Update NiriMod"
-    echo -e "    ${GREEN}2${NC}) Install from local directory (this script's folder)"
-    echo -e "    ${GREEN}3${NC}) Uninstall NiriMod"
+    echo -e "    ${GREEN}2${NC}) Uninstall NiriMod"
     echo -e "    ${GREEN}q${NC}) Quit"
     echo ""
     read -p "$(echo -e "  ${BOLD}Enter your choice:${NC} ")" choice < /dev/tty || true
@@ -490,14 +478,6 @@ main_menu() {
         ;;
       2)
         print_banner
-        check_dependencies
-        copy_local_source
-        install_app
-        pause
-        exit 0
-        ;;
-      3)
-        print_banner
         uninstall
         ;;
       q|Q)
@@ -505,7 +485,7 @@ main_menu() {
         exit 0
         ;;
       *)
-        error "Invalid option. Please choose 1, 2, 3, or q."
+        error "Invalid option. Please choose 1, 2, or q."
         sleep 1
         ;;
     esac
@@ -515,7 +495,6 @@ main_menu() {
 # Entry Point
 # Flags:
 #   --install        Download from GitHub and install (non-interactive)
-#   --local          Install from the directory containing this script
 #   --uninstall      Remove NiriMod (non-interactive)
 case "${1:-}" in
   --install)
@@ -525,13 +504,7 @@ case "${1:-}" in
     install_app
     exit 0
     ;;
-  --local)
-    print_banner
-    check_dependencies
-    copy_local_source
-    install_app
-    exit 0
-    ;;
+
   --uninstall)
     print_banner
     uninstall
@@ -541,7 +514,7 @@ case "${1:-}" in
     ;;
   *)
     error "Unknown option: $1"
-    echo "Usage: $0 [--install | --local | --uninstall]"
+    echo "Usage: $0 [--install | --uninstall]"
     exit 1
     ;;
 esac
