@@ -114,9 +114,9 @@ class AppearancePage(BasePage):
         content.append(shadow_grp)
 
         blur_grp = Adw.PreferencesGroup(title="Blur (Global)")
-        blur_node = find_or_create(nodes, "blur")
+        blur_node = next((n for n in nodes if n.name == "blur"), None)
 
-        passes_val = int(blur_node.child_arg("passes") or 0)
+        passes_val = int(blur_node.child_arg("passes") if blur_node else 0)
         passes_adj = Gtk.Adjustment(value=passes_val, lower=0, upper=10, step_increment=1)
         passes_row = Adw.SpinRow(title="Passes (0 = disabled)", adjustment=passes_adj, digits=0)
 
@@ -131,7 +131,7 @@ class AppearancePage(BasePage):
         passes_row.connect("notify::value", _on_passes_changed)
         blur_grp.add(passes_row)
 
-        offset_val = float(blur_node.child_arg("offset") or 2.0)
+        offset_val = float(blur_node.child_arg("offset") if blur_node else 2.0)
         offset_adj = Gtk.Adjustment(value=offset_val, lower=0.0, upper=20.0, step_increment=0.1)
         offset_row = Adw.SpinRow(title="Offset", adjustment=offset_adj, digits=1)
 
@@ -146,7 +146,7 @@ class AppearancePage(BasePage):
         offset_row.connect("notify::value", _on_offset_changed)
         blur_grp.add(offset_row)
 
-        noise_val = float(blur_node.child_arg("noise") or 0.0)
+        noise_val = float(blur_node.child_arg("noise") if blur_node else 0.0)
         noise_adj = Gtk.Adjustment(value=noise_val, lower=0.0, upper=1.0, step_increment=0.01)
         noise_row = Adw.SpinRow(title="Noise", adjustment=noise_adj, digits=2)
 
@@ -161,7 +161,7 @@ class AppearancePage(BasePage):
         noise_row.connect("notify::value", _on_noise_changed)
         blur_grp.add(noise_row)
 
-        saturation_val = float(blur_node.child_arg("saturation") or 1.0)
+        saturation_val = float(blur_node.child_arg("saturation") if blur_node else 1.0)
         saturation_adj = Gtk.Adjustment(value=saturation_val, lower=0.0, upper=5.0, step_increment=0.1)
         saturation_row = Adw.SpinRow(title="Saturation", adjustment=saturation_adj, digits=1)
 

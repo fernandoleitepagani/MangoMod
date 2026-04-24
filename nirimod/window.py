@@ -637,8 +637,15 @@ class NiriModWindow(Adw.ApplicationWindow):
         self.mark_dirty()
         self.notify_nodes_changed()
 
-    def show_toast(self, message: str, timeout: int = 3):
+    def show_toast(self, message: str, timeout: int = 3, copy_text: str = None):
         toast = Adw.Toast(title=message, timeout=timeout)
+        if copy_text is not None:
+            toast.set_button_label("Copy")
+            toast.connect("button-clicked", lambda *_: self.get_clipboard().set(copy_text))
+        elif "error" in message.lower() or "failed" in message.lower():
+            toast.set_button_label("Copy")
+            toast.connect("button-clicked", lambda *_: self.get_clipboard().set(message))
+            
         self._toast_overlay.add_toast(toast)
 
     def _check_onboarding(self):
