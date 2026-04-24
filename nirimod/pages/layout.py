@@ -247,7 +247,7 @@ class LayoutPage(BasePage):
 
     def _toggle_top(self, key: str, enabled: bool):
         nodes = self._nodes
-        existing = next((n for n in nodes if n.name == key), None)
+        existing = next((n for n in reversed(nodes) if n.name == key), None)
         
         app_state = self._win.app_state
         if enabled and not existing:

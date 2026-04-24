@@ -37,7 +37,7 @@ class KdlNode:
     _removed_children: dict[str, tuple[int, "KdlNode"]] = field(default_factory=dict, compare=False, repr=False)
 
     def get_child(self, name: str) -> "KdlNode | None":
-        for c in self.children:
+        for c in reversed(self.children):
             if c.name == name:
                 return c
         return None
@@ -698,7 +698,7 @@ def find_or_create(nodes: list[KdlNode], *path: str) -> KdlNode:
     current_list = nodes
     node: KdlNode | None = None
     for name in path:
-        node = next((n for n in current_list if n.name == name), None)
+        node = next((n for n in reversed(current_list) if n.name == name), None)
         if node is None:
             node = KdlNode(name=name)
             # give it a blank line so it doesn't get concatenated to
@@ -754,7 +754,7 @@ def set_node_flag(parent: KdlNode, flag_name: str, enabled: bool) -> None:
 
 
 def get_nodes_section(nodes: list[KdlNode], name: str) -> KdlNode | None:
-    return next((n for n in nodes if n.name == name), None)
+    return next((n for n in reversed(nodes) if n.name == name), None)
 
 
 def safe_switch_connect(switch_row, initial_value: bool, callback) -> None:

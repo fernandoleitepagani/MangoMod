@@ -252,7 +252,7 @@ class WindowRulesPage(BasePage):
         prefs.add(match_grp)
 
         # ── Visibility & layout ───────────────────────────────────────────
-        layout_grp = Adw.PreferencesGroup(title="Layout & Visibility")
+        layout_grp = Adw.PreferencesGroup(title="Layout &amp; Visibility")
 
         bool_rows: dict[str, Adw.SwitchRow] = {}
         for key, label in BOOL_ACTION_LABELS.items():
