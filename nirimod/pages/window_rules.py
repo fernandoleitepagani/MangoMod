@@ -369,6 +369,7 @@ class WindowRulesPage(BasePage):
             for key, sr in bool_rows.items():
                 if sr.get_active():
                     cn = KdlNode(key)
+                    cn.args = [True]
                     new_rule.children.append(cn)
 
             # opacity
@@ -382,6 +383,7 @@ class WindowRulesPage(BasePage):
             if blur_row.get_active():
                 be = KdlNode("background-effect")
                 blur_child = KdlNode("blur")
+                blur_child.args = [True]
                 be.children.append(blur_child)
                 new_rule.children.append(be)
 
@@ -566,6 +568,7 @@ class WindowRulesPage(BasePage):
             if blur_row.get_active():
                 be = KdlNode("background-effect")
                 bc = KdlNode("blur")
+                bc.args = [True]
                 be.children.append(bc)
                 new_rule.children.append(be)
             op = op_row.get_value()
