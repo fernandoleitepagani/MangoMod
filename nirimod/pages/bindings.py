@@ -14,7 +14,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk
 
 from nirimod.kdl_parser import KdlNode
-from nirimod.pages.base import BasePage, make_toolbar_page
+from nirimod.pages.base import BasePage
 from nirimod.widgets import KeyboardVisualizer, normalize_key_id
 
 
@@ -351,7 +351,6 @@ class BindingsPage(BasePage):
         binds_map = _build_key_bindings_map(self._binds)
         self._viz.set_bindings(binds_map)
         self._viz.set_search(self._kb_search_query)
-        n_bound = len(binds_map)
         n_total = len(self._binds)
         self._kb_stats_header.set_label(
             f"{n_total} active bindings detected"

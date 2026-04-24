@@ -39,7 +39,7 @@ except ModuleNotFoundError:
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gio, GLib, Gtk
+from gi.repository import Adw, Gio, GLib
 
 from nirimod.window import NiriModWindow
 

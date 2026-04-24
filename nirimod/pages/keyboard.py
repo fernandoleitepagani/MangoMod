@@ -16,7 +16,7 @@ from nirimod.kdl_parser import (
     set_node_flag,
     safe_switch_connect,
 )
-from nirimod.pages.base import BasePage, make_toolbar_page
+from nirimod.pages.base import BasePage
 
 
 class KeyboardPage(BasePage):

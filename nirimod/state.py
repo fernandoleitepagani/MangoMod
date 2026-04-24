@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 from nirimod.kdl_parser import (
     NIRI_CONFIG,
     KdlNode,
-    load_niri_config,
     load_niri_config_multi,
     parse_kdl,
     save_niri_config,

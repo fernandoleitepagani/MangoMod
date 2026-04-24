@@ -8,11 +8,10 @@ a live GTK session or filesystem access.
 from __future__ import annotations
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from nirimod.kdl_parser import KdlNode, KdlRawString, parse_kdl, write_kdl
 from nirimod.state import AppState
-from nirimod.undo import UndoEntry
 
 
 class TestAppStateInit(unittest.TestCase):
@@ -79,7 +78,7 @@ class TestUndoRedo(unittest.TestCase):
 
     def test_undo_sets_dirty(self):
         state = self._make_state_with_nodes("gaps 8\n")
-        state.push_undo("x", "gaps 8\n", "gaps 16\n")
+        state.push_undo("x", "gaps 16\n", "gaps 24\n")
         state.apply_undo()
         self.assertTrue(state.is_dirty)
 

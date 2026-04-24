@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-import subprocess
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gtk, GLib, Pango, Gio
+from gi.repository import Gtk, Pango
+
+from pathlib import Path
 
 from nirimod import niri_ipc
-from nirimod.kdl_parser import NIRI_CONFIG
-from nirimod.pages.base import BasePage, make_toolbar_page
+from nirimod.kdl_parser import NIRI_CONFIG, KdlNode
+from nirimod.pages.base import BasePage
 
 
 class RawConfigPage(BasePage):
@@ -21,7 +22,7 @@ class RawConfigPage(BasePage):
         self._content = content
         
         # File selector (replaces the window title)
-        self._current_files = []
+        self._current_files: list[tuple[KdlNode, Path]] = []
         self._file_dropdown = Gtk.DropDown()
         self._file_dropdown.set_valign(Gtk.Align.CENTER)
         self._file_dropdown.connect("notify::selected-item", self._on_file_selected)

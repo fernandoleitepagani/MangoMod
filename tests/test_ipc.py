@@ -7,7 +7,6 @@ a live niri compositor.
 
 from __future__ import annotations
 
-import json
 import unittest
 from unittest.mock import patch
 

@@ -13,7 +13,7 @@ from gi.repository import Adw, Gtk
 
 from nirimod import niri_ipc
 from nirimod.kdl_parser import KdlNode, set_child_arg, safe_switch_connect
-from nirimod.pages.base import BasePage, make_toolbar_page
+from nirimod.pages.base import BasePage
 
 if TYPE_CHECKING:
     from nirimod.window import NiriModWindow

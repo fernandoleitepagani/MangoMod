@@ -34,6 +34,7 @@ class KdlNode:
     trailing_trivia: str = ""
     children_trailing_trivia: str = ""
     source_file: Path | None = field(default=None, compare=False, repr=False)
+    _removed_children: dict[str, tuple[int, "KdlNode"]] = field(default_factory=dict, compare=False, repr=False)
 
     def get_child(self, name: str) -> "KdlNode | None":
         for c in self.children:

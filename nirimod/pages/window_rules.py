@@ -368,9 +368,7 @@ class WindowRulesPage(BasePage):
             # bool actions
             for key, sr in bool_rows.items():
                 if sr.get_active():
-                    cn = KdlNode(key)
-                    cn.args = [True]
-                    new_rule.children.append(cn)
+                    new_rule.children.append(KdlNode(key, args=[True]))
 
             # opacity
             op = op_row.get_value()
@@ -382,9 +380,7 @@ class WindowRulesPage(BasePage):
             # blur
             if blur_row.get_active():
                 be = KdlNode("background-effect")
-                blur_child = KdlNode("blur")
-                blur_child.args = [True]
-                be.children.append(blur_child)
+                be.children.append(KdlNode("blur", args=[True]))
                 new_rule.children.append(be)
 
             # dimensions
@@ -562,14 +558,10 @@ class WindowRulesPage(BasePage):
                 new_rule.children.append(m)
             for key, sr in bool_rows.items():
                 if sr.get_active():
-                    cn = KdlNode(key)
-                    cn.args = [True]
-                    new_rule.children.append(cn)
+                    new_rule.children.append(KdlNode(key, args=[True]))
             if blur_row.get_active():
                 be = KdlNode("background-effect")
-                bc = KdlNode("blur")
-                bc.args = [True]
-                be.children.append(bc)
+                be.children.append(KdlNode("blur", args=[True]))
                 new_rule.children.append(be)
             op = op_row.get_value()
             if op < 1.0:

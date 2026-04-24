@@ -11,7 +11,7 @@ from gi.repository import Adw, Gtk
 
 from nirimod.kdl_parser import KdlNode, set_child_arg
 from nirimod import niri_ipc
-from nirimod.pages.base import BasePage, make_toolbar_page
+from nirimod.pages.base import BasePage
 
 
 class WorkspacesPage(BasePage):

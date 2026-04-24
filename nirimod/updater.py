@@ -47,7 +47,7 @@ def check_for_updates(callback):
 
 def launch_updater_in_terminal():
     # Write a tiny installer script to /tmp and open it in whatever terminal is around.
-    script_content = f"""#!/usr/bin/env bash
+    script_content = """#!/usr/bin/env bash
 echo "Starting NiriMod update..."
 curl -sSL https://raw.githubusercontent.com/srinivasr/nirimod/main/install.sh | bash -s -- --install
 echo ""

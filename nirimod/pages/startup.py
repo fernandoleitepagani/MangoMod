@@ -11,7 +11,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk, GLib
 
 from nirimod.kdl_parser import KdlNode
-from nirimod.pages.base import BasePage, make_toolbar_page
+from nirimod.pages.base import BasePage
 
 
 class StartupPage(BasePage):
