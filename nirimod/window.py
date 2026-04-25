@@ -705,7 +705,14 @@ class NiriModWindow(Adw.ApplicationWindow):
             BACKUP_DIR.mkdir(parents=True, exist_ok=True)
             for p in self.app_state.source_files:
                 if p.exists():
-                    shutil.copy2(p, BACKUP_DIR / p.name)
+                    try:
+                        rel = p.relative_to(NIRI_CONFIG.parent)
+                        dest = BACKUP_DIR / rel
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(p, dest)
+                    except ValueError:
+                        # Fallback if the source file is not under NIRI_CONFIG.parent
+                        shutil.copy2(p, BACKUP_DIR / p.name)
             self.show_toast("Backup created in ~/.config/niri/backup/ ✓")
         except Exception as e:
             self.show_toast(f"Backup failed: {e}", timeout=6)
@@ -727,9 +734,17 @@ class NiriModWindow(Adw.ApplicationWindow):
 
     def _perform_reset_to_backup(self):
         try:
-            for f in BACKUP_DIR.iterdir():
-                if f.is_file():
-                    shutil.copy2(f, NIRI_CONFIG.parent / f.name)
+            def _restore(src_dir, dest_dir):
+                for f in src_dir.iterdir():
+                    if f.is_file():
+                        rel = f.relative_to(BACKUP_DIR)
+                        target = dest_dir / rel
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(f, target)
+                    elif f.is_dir():
+                        _restore(f, dest_dir)
+                        
+            _restore(BACKUP_DIR, NIRI_CONFIG.parent)
             shutil.rmtree(BACKUP_DIR)
             self.app_state.reload_from_disk()
             self.notify_nodes_changed()

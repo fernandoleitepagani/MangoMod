@@ -157,7 +157,7 @@ def _lex(text: str) -> list[tuple[str, str]]:
             continue
 
         # raw string r#"..."# (handle r#, r##, etc.)
-        if text[i] == "r" and i + 1 < n and text[i + 1] == "#":
+        if text[i] == "r" and i + 1 < n and text[i + 1] in '#"':
             j = i + 1
             while j < n and text[j] == "#":
                 j += 1
@@ -244,7 +244,7 @@ def _parse_value(tok_type: str, tok_val: str) -> Any:
 
 
 def _parse_nodes(
-    tokens: list[tuple[str, str]], pos: int
+    tokens: list[tuple[str, str]], pos: int, is_top_level: bool = False
 ) -> tuple[list[KdlNode], int, str]:
     nodes: list[KdlNode] = []
     n = len(tokens)
@@ -264,6 +264,10 @@ def _parse_nodes(
             break
 
         if tt == _TOK_RBRACE:
+            if is_top_level:
+                current_trivia += tv
+                pos += 1
+                continue
             break
 
         if tt == _TOK_SLASHDASH:
@@ -387,7 +391,7 @@ def _parse_nodes(
 
 def parse_kdl(text: str) -> list[KdlNode]:
     tokens = _lex(text)
-    nodes, _, eof_trivia = _parse_nodes(tokens, 0)
+    nodes, _, eof_trivia = _parse_nodes(tokens, 0, is_top_level=True)
     if nodes and eof_trivia:
         setattr(nodes[-1], "eof_trivia", eof_trivia)
     return nodes
@@ -628,7 +632,7 @@ def _write_node(node: KdlNode, indent: int = 0) -> str:
 
             for child in node.children:
                 child_str = _write_node(child, indent + 1)
-                if res and not res[-1].isspace() and child_str and not child_str[0].isspace():
+                if res and not res.endswith("\n") and child_str and not child_str.startswith("\n"):
                     res += "\n"
                 res += child_str
 
@@ -674,7 +678,7 @@ def write_kdl(nodes: list[KdlNode]) -> str:
         if getattr(n, "eof_trivia", None):
             node_str += getattr(n, "eof_trivia")
             
-        if res and not res[-1].isspace() and node_str and not node_str[0].isspace():
+        if res and not res.endswith("\n") and node_str and not node_str.startswith("\n"):
             res += "\n"
         res += node_str
 

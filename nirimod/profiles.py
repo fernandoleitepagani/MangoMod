@@ -24,7 +24,13 @@ def save_profile(name: str, source_files: set[Path] | None = None) -> None:
         dest_dir.mkdir(exist_ok=True)
         for p in source_files:
             if p.exists():
-                shutil.copy2(p, dest_dir / p.name)
+                try:
+                    rel = p.relative_to(NIRI_CONFIG.parent)
+                    dest = dest_dir / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(p, dest)
+                except ValueError:
+                    shutil.copy2(p, dest_dir / p.name)
     else:
         if NIRI_CONFIG.exists():
             shutil.copy2(NIRI_CONFIG, PROFILES_DIR / f"{name}.kdl")
@@ -33,10 +39,17 @@ def save_profile(name: str, source_files: set[Path] | None = None) -> None:
 def load_profile(name: str) -> bool:
     dir_profile = PROFILES_DIR / name
     if dir_profile.is_dir():
-        for src in dir_profile.iterdir():
-            if src.suffix == ".kdl":
-                dest = NIRI_CONFIG.parent / src.name
-                shutil.copy2(src, dest)
+        def _restore(src_dir, dest_dir):
+            for f in src_dir.iterdir():
+                if f.is_file():
+                    rel = f.relative_to(dir_profile)
+                    target = dest_dir / rel
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(f, target)
+                elif f.is_dir():
+                    _restore(f, dest_dir)
+                    
+        _restore(dir_profile, NIRI_CONFIG.parent)
         return True
 
     src = PROFILES_DIR / f"{name}.kdl"
