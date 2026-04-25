@@ -93,6 +93,18 @@ Works on Arch, Fedora, openSUSE, and Debian/Ubuntu.
 
 ---
 
-Inspired by [Hyprmod](https://github.com/BlueManCZ/hyprmod).
+## Contributing
+
+Contributions are always welcome! Please check out [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and coding standards. If you're planning a major change, please open an issue first to discuss it.
+
+<a href="https://www.star-history.com/?repos=srinivasr%2Fnirimod&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=srinivasr/nirimod&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=srinivasr/nirimod&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=srinivasr/nirimod&type=date&legend=top-left" />
+ </picture>
+</a>
+
+---
 
 *NiriMod is an independent project, not affiliated with the niri team.*
