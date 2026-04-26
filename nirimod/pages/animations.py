@@ -1,8 +1,13 @@
-"""Animations page with bezier curve editor."""
+"""Animations page with bezier curve editor and Nirimation preset browser."""
 
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
+import threading
+import urllib.error
+import urllib.request
 
 import gi
 
@@ -10,21 +15,35 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
-from nirimod.kdl_parser import KdlNode, find_or_create, set_child_arg, set_node_flag
+from nirimod.kdl_parser import KdlNode, find_or_create, parse_kdl, set_child_arg, set_node_flag
 from nirimod.pages.base import BasePage
+
+_NIRIMATION_API = (
+    "https://api.github.com/repos/XansiVA/nirimation/contents/animations"
+)
+_NIRIMATION_RAW = (
+    "https://raw.githubusercontent.com/XansiVA/nirimation/main/animations/{name}"
+)
+_NIRIMATION_HTML = (
+    "https://github.com/XansiVA/nirimation/blob/main/animations/{name}"
+)
+
+# In-memory cache: None = not fetched, list = fetched entries, Exception = error
+_nirimation_cache: list[dict] | Exception | None = None
+
 
 
 ANIM_NAMES = [
-    ("workspace-switch", "Workspace Switch"),
-    ("window-open", "Window Open"),
-    ("window-close", "Window Close"),
-    ("window-movement", "Window Movement"),
-    ("window-resize", "Window Resize"),
-    ("horizontal-view-movement", "Horizontal View Movement"),
-    ("config-notification-open-close", "Config Notification"),
-    ("screenshot-ui-open", "Screenshot UI Open"),
-    ("overview-open-close", "Overview Open/Close"),
-    ("overview-screenshot", "Overview Screenshot"),
+    ("workspace-switch", "Workspace Switch", "video-display-symbolic"),
+    ("window-open", "Window Open", "window-new-symbolic"),
+    ("window-close", "Window Close", "window-close-symbolic"),
+    ("window-movement", "Window Movement", "transform-move-symbolic"),
+    ("window-resize", "Window Resize", "view-fullscreen-symbolic"),
+    ("horizontal-view-movement", "Horizontal View Movement", "pan-end-symbolic"),
+    ("config-notification-open-close", "Config Notification", "preferences-system-symbolic"),
+    ("screenshot-ui-open", "Screenshot UI Open", "camera-photo-symbolic"),
+    ("overview-open-close", "Overview Open/Close", "view-app-grid-symbolic"),
+    ("overview-screenshot", "Overview Screenshot", "camera-photo-symbolic"),
 ]
 
 PRESET_CURVES = {
@@ -197,16 +216,219 @@ class BezierEditor(Gtk.DrawingArea):
             self._on_changed(*self._cp)
 
 
+def _fetch_nirimation_presets(callback):
+    """Fetch preset list from nirimation GitHub API in a background thread.
+
+    *callback* is called on the GLib main loop with either a list[dict] (success)
+    or an Exception (failure). Each dict has keys: name, display_name, download_url,
+    html_url.
+    """
+    global _nirimation_cache
+
+    if _nirimation_cache is not None:
+        result = _nirimation_cache
+        GLib.idle_add(callback, result)
+        return
+
+    def _worker():
+        global _nirimation_cache
+        try:
+            req = urllib.request.Request(
+                _NIRIMATION_API,
+                headers={"User-Agent": "nirimod/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+
+            entries = []
+            for item in data:
+                if item.get("type") != "file":
+                    continue
+                n = item["name"]
+                if not n.endswith(".kdl"):
+                    continue
+                stem = n[:-4]  # strip .kdl
+                display = stem.replace("-", " ").title()
+                entries.append(
+                    {
+                        "name": n,
+                        "display_name": display,
+                        "download_url": item.get(
+                            "download_url",
+                            _NIRIMATION_RAW.format(name=n),
+                        ),
+                        "html_url": item.get(
+                            "html_url",
+                            _NIRIMATION_HTML.format(name=n),
+                        ),
+                    }
+                )
+            entries.sort(key=lambda e: e["display_name"])
+            _nirimation_cache = entries
+            GLib.idle_add(callback, entries)
+        except Exception as exc:
+            _nirimation_cache = exc
+            GLib.idle_add(callback, exc)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 class AnimationsPage(BasePage):
+    def __init__(self, window):
+        super().__init__(window)
+        self._prev_anim_snapshot = None
+        self._active_preset_name = None
+        self._state_file = Path("~/.config/nirimod/animations.json").expanduser()
+        self._load_state()
+
+    def _load_state(self):
+        try:
+            if self._state_file.exists():
+                with open(self._state_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self._prev_anim_snapshot = data.get("prev_anim_snapshot")
+                    self._active_preset_name = data.get("active_preset_name")
+        except Exception as e:
+            print(f"Failed to load animations state: {e}")
+
+    def _save_state(self):
+        try:
+            self._state_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self._state_file, "w", encoding="utf-8") as f:
+                json.dump({
+                    "prev_anim_snapshot": self._prev_anim_snapshot,
+                    "active_preset_name": self._active_preset_name
+                }, f)
+        except Exception as e:
+            print(f"Failed to save animations state: {e}")
+
     def build(self) -> Gtk.Widget:
-        tb, _, _, content = self._make_toolbar_page("Animations")
-        self._content = content
+        tb, header, _, _ = self._make_toolbar_page("")
+        header.set_title_widget(Gtk.Box()) # hide the default title
+
+        # Custom Header (matches Workspace View / Keybindings aesthetic)
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        header_box.set_margin_start(24)
+        header_box.set_margin_end(24)
+        header_box.set_margin_top(20)
+        header_box.set_margin_bottom(12)
+
+        # Title/Subtitle Group
+        title_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        title_vbox.set_hexpand(True)
+        
+        self._main_title = Gtk.Label(label="Animations")
+        self._main_title.set_xalign(0.0)
+        self._main_title.add_css_class("title-1")
+        title_vbox.append(self._main_title)
+
+        self._active_preset_lbl = Gtk.Label(label="Using custom animations")
+        self._active_preset_lbl.set_xalign(0.0)
+        self._active_preset_lbl.add_css_class("dim-label")
+        self._active_preset_lbl.add_css_class("caption")
+        title_vbox.append(self._active_preset_lbl)
+        header_box.append(title_vbox)
+
+        # Switch to Custom option is now inside the Custom tab
+
+
+        # View Switcher (Styled as Custom/Presets buttons)
+        self._view_stack = Adw.ViewStack()
+        
+        switcher_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        switcher_box.add_css_class("linked")
+        switcher_box.set_valign(Gtk.Align.START)
+        
+        self._btn_custom = Gtk.ToggleButton(label="Custom")
+        self._btn_presets = Gtk.ToggleButton(label="Presets")
+        self._btn_presets.set_group(self._btn_custom)
+        
+        self._btn_custom.connect("toggled", self._on_view_toggle)
+        self._btn_presets.connect("toggled", self._on_view_toggle)
+        
+        switcher_box.append(self._btn_custom)
+        switcher_box.append(self._btn_presets)
+        header_box.append(switcher_box)
+        
+        tb.add_top_bar(header_box)
+
+        # Tabs
+        custom_widget = self._build_custom_tab()
+        self._view_stack.add_named(custom_widget, "custom")
+
+        presets_widget = self._build_presets_tab()
+        self._view_stack.add_named(presets_widget, "presets")
+
+        # Default to Custom
+        self._view_stack.set_visible_child_name("custom")
+        self._btn_custom.set_active(True)
+
+        tb.set_content(self._view_stack)
+
+        self._update_header()
+        return tb
+
+    def _on_view_toggle(self, btn):
+        if not btn.get_active():
+            return
+        is_custom = btn == self._btn_custom
+        self._view_stack.set_visible_child_name("custom" if is_custom else "presets")
+
+    def _update_header(self):
+        if self._active_preset_name:
+            self._active_preset_lbl.set_label(f"✨ Active preset: <b>{GLib.markup_escape_text(self._active_preset_name)}</b>")
+            self._active_preset_lbl.set_use_markup(True)
+        else:
+            self._active_preset_lbl.set_label("Using custom animations")
+            self._active_preset_lbl.set_use_markup(False)
+        
+        if hasattr(self, "_custom_switch_grp"):
+            self._custom_switch_grp.set_visible(self._prev_anim_snapshot is not None)
+
+    def _build_custom_tab(self) -> Gtk.Widget:
+        """Return the custom animations tab (global toggles, bezier editor, and categories)."""
+        if not hasattr(self, "_custom_scroll"):
+            self._custom_scroll = Gtk.ScrolledWindow()
+            self._custom_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            self._custom_scroll.set_vexpand(True)
+            self._custom_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+            self._custom_content.set_margin_start(32)
+            self._custom_content.set_margin_end(32)
+            self._custom_content.set_margin_top(24)
+            self._custom_content.set_margin_bottom(32)
+            self._custom_scroll.set_child(self._custom_content)
+        else:
+            while child := self._custom_content.get_first_child():
+                self._custom_content.remove(child)
+
+        content = self._custom_content
+
+        # Switch to Custom Banner
+        self._custom_switch_grp = Adw.PreferencesGroup()
+        self._custom_switch_row = Adw.ActionRow(
+            title="Community Preset Active",
+            subtitle="You are currently using a preset. Switch back to use your custom animation settings."
+        )
+        self._custom_switch_row.add_css_class("property")
+        self._custom_switch_row.set_icon_name("emblem-important-symbolic")
+        switch_btn = Gtk.Button(label="Switch to Custom")
+        switch_btn.add_css_class("suggested-action")
+        switch_btn.add_css_class("pill")
+        switch_btn.set_valign(Gtk.Align.CENTER)
+        switch_btn.set_margin_top(8)
+        switch_btn.set_margin_bottom(8)
+        switch_btn.connect("clicked", self._on_restore_previous)
+        self._custom_switch_row.add_suffix(switch_btn)
+        self._custom_switch_grp.add(self._custom_switch_row)
+        self._custom_switch_grp.set_visible(self._prev_anim_snapshot is not None)
+        content.append(self._custom_switch_grp)
 
         anim_node = find_or_create(self._nodes, "animations")
 
         # Global off toggle
-        off_grp = Adw.PreferencesGroup(title="Global")
-        off_row = Adw.SwitchRow(title="Enable Animations")
+        off_grp = Adw.PreferencesGroup(title="Global Settings", description="These apply to all animations universally.")
+        off_row = Adw.SwitchRow(title="Enable Animations", subtitle="Toggle all desktop animations on or off")
+        off_row.set_icon_name("media-playback-start-symbolic")
         off_row.set_active(anim_node.get_child("off") is None)
         off_row.connect(
             "notify::active", lambda r, _: self._toggle_all(not r.get_active())
@@ -218,8 +440,11 @@ class AnimationsPage(BasePage):
             value=slowdown_val, lower=0.1, upper=10.0, step_increment=0.1
         )
         slowdown_row = Adw.SpinRow(
-            title="Global Slowdown Factor", adjustment=slowdown_adj, digits=1
+            title="Global Slowdown Factor",
+            subtitle="Multiply all animation durations by this factor",
+            adjustment=slowdown_adj, digits=1
         )
+        slowdown_row.set_icon_name("preferences-system-time-symbolic")
 
         slowdown_row._last_val = slowdown_val
 
@@ -288,13 +513,281 @@ class AnimationsPage(BasePage):
         content.append(bezier_grp)
 
         # Per-animation rows
-        anim_list_grp = Adw.PreferencesGroup(title="Animation Categories")
-        for anim_key, anim_label in ANIM_NAMES:
-            row = self._build_anim_row(anim_key, anim_label, anim_node)
+        anim_list_grp = Adw.PreferencesGroup(title="Animation Categories", description="Configure durations and curves for specific actions.")
+        for anim_key, anim_label, icon_name in ANIM_NAMES:
+            row = self._build_anim_row(anim_key, anim_label, icon_name, anim_node)
             anim_list_grp.add(row)
         content.append(anim_list_grp)
 
-        return tb
+        return self._custom_scroll
+
+    def _build_presets_tab(self) -> Gtk.Widget:
+        """Return the Nirimation presets tab."""
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        content.set_margin_start(32)
+        content.set_margin_end(32)
+        content.set_margin_top(24)
+        content.set_margin_bottom(32)
+        scroll.set_child(content)
+
+        self._nirimation_section_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        content.append(self._nirimation_section_box)
+        self._nirimation_section_box.append(self._build_nirimation_group())
+
+        return scroll
+
+    def _on_restore_previous(self, _btn):
+        """Restore the animations block that was saved before the last preset apply."""
+        if self._prev_anim_snapshot is None:
+            return
+        try:
+            snap_nodes = parse_kdl(self._prev_anim_snapshot)
+            snap_anim = next((n for n in snap_nodes if n.name == "animations"), None)
+            user_nodes = self._nodes
+            user_anim = next((n for n in reversed(user_nodes) if n.name == "animations"), None)
+            if user_anim is None:
+                user_anim = KdlNode(name="animations")
+                user_anim.leading_trivia = "\n"
+                user_nodes.append(user_anim)
+            if snap_anim is not None:
+                user_anim.children = list(snap_anim.children)
+                user_anim.args = list(snap_anim.args)
+                user_anim.props = dict(snap_anim.props)
+            else:
+                user_anim.children = []
+                user_anim.args = []
+                user_anim.props = {}
+            self._prev_anim_snapshot = None
+            self._active_preset_name = None
+            self._save_state()
+            self._commit("restore previous animations")
+            self.show_toast("↩ Previous animations restored")
+            self._update_header()
+            self._build_custom_tab() # Refresh UI components
+        except Exception as exc:
+            self.show_toast(f"Restore failed: {exc}")
+
+    def _build_nirimation_group(self) -> Adw.PreferencesGroup:
+        """Build the Nirimation community presets section."""
+        # Header: refresh button
+        refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic")
+        refresh_btn.set_tooltip_text("Refresh preset list from GitHub")
+        refresh_btn.add_css_class("flat")
+        refresh_btn.add_css_class("circular")
+
+        grp = Adw.PreferencesGroup(
+            title="Nirimation Community Presets",
+            description="GLSL shader animations from XansiVA/nirimation — replaces your current animations block.",
+        )
+        grp.set_header_suffix(refresh_btn)
+
+        # Spinner row shown while loading
+        spinner = Gtk.Spinner()
+        spinner.start()
+        spinner.set_margin_top(8)
+        spinner.set_margin_bottom(8)
+
+        spinner_row = Adw.ActionRow(title="Fetching presets…")
+        spinner_row.add_prefix(spinner)
+        grp.add(spinner_row)
+
+        # Keep refs so callbacks can update them
+        self._nirimation_grp = grp
+        self._nirimation_placeholder = spinner_row
+        self._nirimation_rows: list[Adw.ActionRow] = []
+
+        def _on_result(result):
+            # Remove spinner placeholder
+            grp.remove(spinner_row)
+            spinner.stop()
+
+            if isinstance(result, Exception):
+                err_row = Adw.ActionRow(
+                    title="Unable to fetch presets",
+                    subtitle=str(result),
+                )
+                err_row.add_prefix(
+                    Gtk.Image.new_from_icon_name("network-error-symbolic")
+                )
+                grp.add(err_row)
+                self._nirimation_rows.append(err_row)
+                return
+
+            for entry in result:
+                row = self._make_nirimation_row(entry)
+                grp.add(row)
+
+        def _on_refresh_clicked(_btn):
+            global _nirimation_cache
+            _nirimation_cache = None  # bust cache
+            # Remove all existing rows and show spinner again
+            for row in list(self._nirimation_rows):
+                grp.remove(row)
+            self._nirimation_rows.clear()
+            sp2 = Gtk.Spinner()
+            sp2.start()
+            sp2.set_margin_top(8)
+            sp2.set_margin_bottom(8)
+            wait_row = Adw.ActionRow(title="Fetching presets…")
+            wait_row.add_prefix(sp2)
+            grp.add(wait_row)
+
+            def _on_result2(result):
+                grp.remove(wait_row)
+                sp2.stop()
+                if isinstance(result, Exception):
+                    err_row = Adw.ActionRow(
+                        title="Unable to fetch presets",
+                        subtitle=str(result),
+                    )
+                    err_row.add_prefix(
+                        Gtk.Image.new_from_icon_name("network-error-symbolic")
+                    )
+                    grp.add(err_row)
+                    self._nirimation_rows.append(err_row)
+                    return
+                for entry in result:
+                    row = self._make_nirimation_row(entry)
+                    grp.add(row)
+
+            _fetch_nirimation_presets(_on_result2)
+
+        refresh_btn.connect("clicked", _on_refresh_clicked)
+        _fetch_nirimation_presets(_on_result)
+        return grp
+
+    def _make_nirimation_row(self, entry: dict) -> Adw.ActionRow:
+        """Create a single preset row for the Nirimation group."""
+        row = Adw.ActionRow(
+            title=entry["display_name"],
+            subtitle=entry["name"],
+        )
+
+
+        # GitHub link button
+        link_btn = Gtk.Button(icon_name="web-browser-symbolic")
+        link_btn.set_tooltip_text("View on GitHub")
+        link_btn.add_css_class("flat")
+        link_btn.add_css_class("circular")
+        link_btn.set_valign(Gtk.Align.CENTER)
+        link_btn.connect(
+            "clicked",
+            lambda _b, u=entry["html_url"]: Gtk.show_uri(None, u, 0),
+        )
+        row.add_suffix(link_btn)
+
+        # Apply button
+        apply_btn = Gtk.Button(label="Apply")
+        apply_btn.add_css_class("suggested-action")
+        apply_btn.add_css_class("pill")
+        apply_btn.set_valign(Gtk.Align.CENTER)
+        apply_btn.connect(
+            "clicked",
+            lambda _b, e=entry, r=row: self._confirm_apply_nirimation(e, r),
+        )
+        row.add_suffix(apply_btn)
+
+        self._nirimation_rows.append(row)
+        return row
+
+    def _confirm_apply_nirimation(self, entry: dict, row: Adw.ActionRow):
+        """Show a confirmation dialog before applying the preset."""
+        try:
+            dialog = Adw.AlertDialog(
+                heading=f"Apply \u201c{entry['display_name']}\u201d?",
+                body=(
+                    "This will fully replace your current animations block with the "
+                    f"\u201c{entry['display_name']}\u201d preset from XansiVA/nirimation.\n\n"
+                    "Your existing bezier curves and per-animation settings will be overwritten. "
+                    "You can undo this with Ctrl+Z."
+                ),
+            )
+            dialog.add_response("cancel", "Cancel")
+            dialog.add_response("apply", "Apply Preset")
+            dialog.set_response_appearance("apply", Adw.ResponseAppearance.SUGGESTED)
+            dialog.set_default_response("cancel")
+            dialog.set_close_response("cancel")
+
+            def _on_response(d, resp):
+                if resp == "apply":
+                    self._apply_nirimation_preset(entry, row)
+
+            dialog.connect("response", _on_response)
+            dialog.present(self._win)
+        except AttributeError:
+            # Adw.AlertDialog not available (older libadwaita) — fall back to direct apply
+            self._apply_nirimation_preset(entry, row)
+
+    def _apply_nirimation_preset(self, entry: dict, row: Adw.ActionRow):
+        """Download the preset KDL and apply it (replaces the animations node)."""
+        # Disable row while fetching
+        row.set_sensitive(False)
+        self.show_toast(f"Downloading {entry['display_name']}\u2026", timeout=5)
+
+        def _worker():
+            try:
+                req = urllib.request.Request(
+                    entry["download_url"],
+                    headers={"User-Agent": "nirimod/1.0"},
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    kdl_text = resp.read().decode()
+                GLib.idle_add(_on_downloaded, kdl_text, None)
+            except Exception as exc:
+                GLib.idle_add(_on_downloaded, None, exc)
+
+        def _on_downloaded(kdl_text, error):
+            row.set_sensitive(True)
+            if error:
+                self.show_toast(f"Failed to download preset: {error}")
+                return
+            try:
+                preset_nodes = parse_kdl(kdl_text)
+                preset_anim = next(
+                    (n for n in preset_nodes if n.name == "animations"), None
+                )
+                if preset_anim is None:
+                    self.show_toast("Preset has no animations block — nothing applied.")
+                    return
+
+                user_nodes = self._nodes
+                user_anim = next(
+                    (n for n in reversed(user_nodes) if n.name == "animations"), None
+                )
+
+                # Snapshot current state BEFORE overwriting
+                from nirimod.kdl_parser import write_kdl
+                if user_anim is not None:
+                    snap_node = KdlNode(name="animations")
+                    snap_node.children = list(user_anim.children)
+                    snap_node.args = list(user_anim.args)
+                    snap_node.props = dict(user_anim.props)
+                    self._prev_anim_snapshot = write_kdl([snap_node])
+                else:
+                    self._prev_anim_snapshot = write_kdl([])
+
+                if user_anim is None:
+                    user_anim = KdlNode(name="animations")
+                    user_anim.leading_trivia = "\n"
+                    user_nodes.append(user_anim)
+
+                user_anim.children = list(preset_anim.children)
+                user_anim.args = list(preset_anim.args)
+                user_anim.props = dict(preset_anim.props)
+
+                self._active_preset_name = entry['display_name']
+                self._save_state()
+                self._commit(f"nirimation preset: {entry['display_name']}")
+                self._update_header()
+                self.show_toast(f"\u2728 {entry['display_name']} preset applied!")
+            except Exception as exc:
+                self.show_toast(f"Error applying preset: {exc}")
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _apply_preset(self, curve: tuple, name: str):
         self._bezier_editor.set_curve(*curve)
@@ -308,9 +801,10 @@ class AnimationsPage(BasePage):
         self._coords_lbl.set_label(f"{x1:.3f}, {y1:.3f}, {x2:.3f}, {y2:.3f}")
 
     def _build_anim_row(
-        self, key: str, label: str, anim_node: KdlNode
+        self, key: str, label: str, icon_name: str, anim_node: KdlNode
     ) -> Adw.ExpanderRow:
         grp = Adw.ExpanderRow(title=label)
+        grp.set_icon_name(icon_name)
         grp.add_css_class("nm-expander")
         an = anim_node.get_child(key)
 

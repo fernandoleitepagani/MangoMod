@@ -283,5 +283,33 @@ toast label {
     border: 1px solid @nm_border;
     border-radius: 12px;
 }
+
+/* --- Animations Page --- */
+
+.nm-anim-banner {
+    background: rgba(147, 51, 234, 0.10);
+    border: 1px solid rgba(147, 51, 234, 0.25);
+    border-radius: 12px;
+    padding: 10px 16px;
+    color: rgba(192, 132, 252, 1.0);
+}
+
+.nm-anim-banner button {
+    background: rgba(147, 51, 234, 0.20);
+    border: 1px solid rgba(147, 51, 234, 0.35);
+    color: rgba(216, 180, 254, 1.0);
+    font-weight: 600;
+    border-radius: 20px;
+    padding: 4px 14px;
+}
+
+.nm-anim-banner button:hover {
+    background: rgba(147, 51, 234, 0.35);
+}
+
+.nm-preset-icon {
+    font-size: 18px;
+    min-width: 28px;
+}
 """
 
