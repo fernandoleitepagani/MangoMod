@@ -70,12 +70,15 @@ detect_distro() {
       PM="zypper" ;;
     ubuntu|debian|linuxmint|pop|elementary|zorin|kali|mx|mxlinux)
       PM="apt" ;;
+    gentoo)
+      PM="emerge" ;;
     *)
       # Try ID_LIKE
-      if [[ "$DISTRO_LIKE" == *"arch"* ]];   then PM="pacman"
+      if   [[ "$DISTRO_LIKE" == *"arch"* ]];   then PM="pacman"
       elif [[ "$DISTRO_LIKE" == *"fedora"* ]] || [[ "$DISTRO_LIKE" == *"rhel"* ]]; then PM="dnf"
-      elif [[ "$DISTRO_LIKE" == *"suse"* ]];  then PM="zypper"
+      elif [[ "$DISTRO_LIKE" == *"suse"* ]];   then PM="zypper"
       elif [[ "$DISTRO_LIKE" == *"debian"* ]] || [[ "$DISTRO_LIKE" == *"ubuntu"* ]]; then PM="apt"
+      elif [[ "$DISTRO_LIKE" == *"gentoo"* ]]; then PM="emerge"
       fi
       ;;
   esac
@@ -91,12 +94,14 @@ detect_distro() {
     elif command -v dnf     &>/dev/null; then PM="dnf"
     elif command -v zypper  &>/dev/null; then PM="zypper"
     elif command -v apt-get &>/dev/null; then PM="apt"
+    elif command -v emerge  &>/dev/null; then PM="emerge"
     fi
   fi
 
   if [ -z "$PM" ]; then
     error "Could not detect a supported package manager."
-    error "Supported: pacman (Arch), dnf (Fedora/RHEL), zypper (openSUSE), apt (Debian/Ubuntu)"
+    error "Supported: pacman (Arch), dnf (Fedora/RHEL), zypper (openSUSE), apt (Debian/Ubuntu), emerge (Gentoo)"
+    error "If you are on an unsupported distro, re-run with --skip-deps and install dependencies manually."
     exit 1
   fi
 
@@ -112,6 +117,15 @@ install_pkgs() {
     dnf)    sudo dnf install -y "${pkgs[@]}" ;;
     zypper) sudo zypper install -y "${pkgs[@]}" ;;
     apt)    sudo apt-get update -qq && sudo apt-get install -y "${pkgs[@]}" ;;
+    emerge)
+      error "Automatic package installation is not supported on Gentoo."
+      error "Please install the following packages manually using emerge:"
+      for pkg in "${pkgs[@]}"; do
+        echo -e "    ${CYAN}emerge $pkg${NC}"
+      done
+      error "Then re-run the installer with --skip-deps."
+      exit 1
+      ;;
   esac
 }
 
@@ -123,6 +137,7 @@ pkg_installed() {
     dnf)    rpm -q "$pkg" &>/dev/null ;;
     zypper) rpm -q "$pkg" &>/dev/null ;;
     apt)    dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed" ;;
+    emerge) command -v qlist &>/dev/null && qlist -I "$pkg" &>/dev/null || return 1 ;;
   esac
 }
 
@@ -142,6 +157,7 @@ resolve_deps() {
       dnf)    MISSING+=("git") ;;
       zypper) MISSING+=("git") ;;
       apt)    MISSING+=("git") ;;
+      emerge) MISSING+=("dev-vcs/git") ;;
     esac
   fi
 
@@ -152,6 +168,7 @@ resolve_deps() {
       dnf)    MISSING+=("curl") ;;
       zypper) MISSING+=("curl") ;;
       apt)    MISSING+=("curl") ;;
+      emerge) MISSING+=("net-misc/curl") ;;
     esac
   fi
 
@@ -161,6 +178,7 @@ resolve_deps() {
       dnf)    MISSING+=("python3") ;;
       zypper) MISSING+=("python3") ;;
       apt)    MISSING+=("python3") ;;
+      emerge) MISSING+=("dev-lang/python") ;;
     esac
   fi
 
@@ -176,6 +194,8 @@ resolve_deps() {
       pkg_installed libgtk-4-1    2>/dev/null || \
       pkg_installed libgtk-4-dev  2>/dev/null || \
         MISSING+=("libgtk-4-dev" "gir1.2-gtk-4.0") ;;
+    emerge)
+      pkg_installed gui-libs/gtk   || MISSING+=("gui-libs/gtk") ;;
   esac
 
   # libadwaita
@@ -191,6 +211,8 @@ resolve_deps() {
       pkg_installed libadwaita-1-0       2>/dev/null || \
       pkg_installed libadwaita-1-dev     2>/dev/null || \
         MISSING+=("libadwaita-1-dev" "gir1.2-adw-1") ;;
+    emerge)
+      pkg_installed gui-libs/libadwaita  || MISSING+=("gui-libs/libadwaita") ;;
   esac
 
   # PyGObject / GObject Introspection
@@ -207,6 +229,8 @@ resolve_deps() {
     apt)
       pkg_installed python3-gi 2>/dev/null || \
         MISSING+=("python3-gi" "python3-gi-cairo") ;;
+    emerge)
+      pkg_installed dev-python/pygobject || MISSING+=("dev-python/pygobject") ;;
   esac
 
   # GObject typelibs (needed at runtime for gi.require_version)
@@ -235,24 +259,30 @@ resolve_deps() {
 # Full Dependency Check
 check_dependencies() {
   step "Checking System Dependencies"
-  detect_distro
-  resolve_deps
-
-  if [ ${#MISSING[@]} -gt 0 ]; then
-    warn "The following packages are missing:"
-    for pkg in "${MISSING[@]}"; do
-      echo -e "    ${RED}•${NC} $pkg"
-    done
-    echo ""
-    if ask "Install missing packages via sudo?"; then
-      install_pkgs "${MISSING[@]}"
-      success "System packages installed."
-    else
-      error "Cannot proceed without required system packages."
-      exit 1
-    fi
+  
+  if [ "${SKIP_DEPS:-0}" -eq 1 ]; then
+    warn "Skipping system package manager checks (--skip-deps)."
+    warn "Please ensure git, curl, python3, gtk4, libadwaita, and pygobject are installed manually."
   else
-    success "All system packages are already installed."
+    detect_distro
+    resolve_deps
+
+    if [ ${#MISSING[@]} -gt 0 ]; then
+      warn "The following packages are missing:"
+      for pkg in "${MISSING[@]}"; do
+        echo -e "    ${RED}•${NC} $pkg"
+      done
+      echo ""
+      if ask "Install missing packages via sudo?"; then
+        install_pkgs "${MISSING[@]}"
+        success "System packages installed."
+      else
+        error "Cannot proceed without required system packages."
+        exit 1
+      fi
+    else
+      success "All system packages are already installed."
+    fi
   fi
 
   # Niri compositor check (optional warning)
@@ -496,25 +526,34 @@ main_menu() {
 # Flags:
 #   --install        Download from GitHub and install (non-interactive)
 #   --uninstall      Remove NiriMod (non-interactive)
-case "${1:-}" in
-  --install)
-    print_banner
-    check_dependencies
-    download_source
-    install_app
-    exit 0
-    ;;
+#   --skip-deps      Skip system package manager checks (useful for Gentoo/unsupported distros)
 
-  --uninstall)
-    print_banner
-    uninstall
-    ;;
-  "")
-    main_menu
-    ;;
-  *)
-    error "Unknown option: $1"
-    echo "Usage: $0 [--install | --uninstall]"
-    exit 1
-    ;;
-esac
+MODE=""
+SKIP_DEPS=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --install) MODE="install" ;;
+    --uninstall) MODE="uninstall" ;;
+    --skip-deps) SKIP_DEPS=1 ;;
+    *)
+      error "Unknown option: $arg"
+      echo "Usage: $0 [--install | --uninstall] [--skip-deps]"
+      exit 1
+      ;;
+  esac
+done
+
+if [ "$MODE" = "install" ]; then
+  print_banner
+  check_dependencies
+  download_source
+  install_app
+  exit 0
+elif [ "$MODE" = "uninstall" ]; then
+  print_banner
+  uninstall
+  exit 0
+else
+  main_menu
+fi

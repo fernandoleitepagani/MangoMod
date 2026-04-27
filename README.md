@@ -76,12 +76,19 @@ This runs an interactive installer that handles dependencies for you.
 | :--- | :--- |
 | `--install` | Skip the prompts, install directly |
 | `--uninstall` | Remove NiriMod cleanly |
+| `--skip-deps` | Skip system package manager checks (for Gentoo, Nix, etc.) |
 
 ---
 
 ## Requirements
 
-Works on Arch, Fedora, openSUSE, and Debian/Ubuntu.
+Works on Arch, Fedora, openSUSE, and Debian/Ubuntu out of the box. For other distros like Gentoo, use the `--skip-deps` flag and install the following packages manually:
+
+**Gentoo** (requires the [GURU overlay](https://wiki.gentoo.org/wiki/Project:GURU) for `niri`):
+```bash
+emerge dev-vcs/git net-misc/curl dev-lang/python gui-libs/gtk gui-libs/libadwaita dev-python/pygobject
+curl -sSL https://raw.githubusercontent.com/srinivasr/nirimod/main/install.sh | bash -s -- --install --skip-deps
+```
 
 | Dependency | Notes |
 | :--- | :--- |
