@@ -1,34 +1,39 @@
 """CSS theme definitions for NiriMod."""
 
-CSS = b"""
-/* NiriMod -- Clean Grouped Sidebar Theme */
+CSS = """
+/* --- Nirimod -- Purple Theme --- */
 
-@define-color nm_accent #9333ea;
-@define-color nm_accent_dim rgba(147, 51, 234, 0.15);
+/* --- Accent --- */
+@define-color nm_accent         #9b6dff;
+@define-color nm_accent_mid     #7c3aed;
+@define-color nm_accent_dim     rgba(155, 109, 255, 0.13);
+@define-color nm_accent_hover   rgba(155, 109, 255, 0.20);
+@define-color nm_accent_border  rgba(155, 109, 255, 0.28);
 
-/* Base Adwaita overrides */
-@define-color window_bg_color #0d0d0f;
-@define-color window_fg_color #e8e8ec;
-@define-color view_bg_color #13131a;
-@define-color view_fg_color #e8e8ec;
-@define-color headerbar_bg_color #0d0d0f;
-@define-color card_bg_color #1a1a22;
-@define-color card_fg_color #e8e8ec;
-@define-color popover_bg_color #1e1e28;
-@define-color popover_fg_color #e8e8ec;
-@define-color dialog_bg_color #141420;
-@define-color dialog_fg_color #e8e8ec;
+/* --- Surfaces --- */
+@define-color window_bg_color    #111114;
+@define-color window_fg_color    #e8e8ed;
+@define-color view_bg_color      #18181c;
+@define-color view_fg_color      #e8e8ed;
+@define-color headerbar_bg_color #111114;
+@define-color card_bg_color      #1e1e24;
+@define-color card_fg_color      #e8e8ed;
+@define-color popover_bg_color   #1e1e24;
+@define-color popover_fg_color   #e8e8ed;
+@define-color dialog_bg_color    #18181c;
+@define-color dialog_fg_color    #e8e8ed;
 
-@define-color nm_border rgba(255, 255, 255, 0.06);
-@define-color nm_border_hover rgba(147, 51, 234, 0.3);
+/* --- Borders --- */
+@define-color nm_border         rgba(255, 255, 255, 0.07);
+@define-color nm_border_strong  rgba(255, 255, 255, 0.12);
 
+/* --- Window --- */
 window {
     background-color: @window_bg_color;
     color: @window_fg_color;
 }
 
-/* --- Sidebar --- */
-
+/* --- Header Bars --- */
 headerbar,
 .nm-sidebar-bg {
     background-color: @window_bg_color;
@@ -38,6 +43,7 @@ headerbar,
     color: @window_fg_color;
 }
 
+/* --- Sidebar --- */
 .navigation-sidebar {
     background-color: transparent;
     border-right: 1px solid @nm_border;
@@ -46,19 +52,18 @@ headerbar,
 .nm-sidebar-listbox {
     background: transparent;
     border: none;
-    border-radius: 10px;
 }
 
 .nm-sidebar-listbox row {
-    border-radius: 8px;
-    margin: 1px 0;
-    padding: 6px 10px;
-    transition: background 150ms ease;
+    border-radius: 7px;
+    margin: 1px 4px;
+    padding: 5px 8px;
+    transition: background 130ms ease;
     color: @window_fg_color;
 }
 
 .nm-sidebar-listbox row:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.045);
 }
 
 .nm-sidebar-listbox row:selected {
@@ -71,62 +76,15 @@ headerbar,
     color: @nm_accent;
 }
 
-/* Section headers in sidebar */
+/* --- Section Labels --- */
 .nm-sidebar-section-label {
     font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    color: rgba(255, 255, 255, 0.3);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.30);
 }
 
-/* Search results popover */
-.nm-search-results {
-    background: transparent;
-    border: none;
-}
-
-.nm-search-results row {
-    padding: 8px 12px;
-    border-radius: 8px;
-    margin: 2px 4px;
-    transition: background 120ms ease;
-}
-
-.nm-search-results row:hover {
-    background: rgba(147, 51, 234, 0.12);
-}
-
-/* --- Content Cards --- */
-
-.nm-card,
-preferencesgroup > box {
-    background-color: @card_bg_color;
-    border: 1px solid @nm_border;
-    border-radius: 14px;
-    padding: 4px;
-}
-
-row {
-    border-radius: 10px;
-    transition: background 150ms ease;
-}
-
-row:hover {
-    background: rgba(255, 255, 255, 0.03);
-}
-
-/* --- Badges & Status --- */
-
-.nm-badge {
-    background: @nm_accent;
-    color: white;
-    border-radius: 20px;
-    font-size: 10px;
-    font-weight: 800;
-    padding: 1px 7px;
-    min-width: 16px;
-}
-
+/* --- Search --- */
 .nm-search-entry {
     color: @window_fg_color;
     background-color: @card_bg_color;
@@ -134,26 +92,76 @@ row:hover {
     border-radius: 8px;
 }
 
-.nm-search-entry > box {
-    color: @window_fg_color;
+.nm-search-entry > box { color: @window_fg_color; }
+.nm-search-entry text  { color: @window_fg_color; }
+
+.nm-search-results {
+    background: transparent;
+    border: none;
 }
 
-.nm-search-entry text {
-    color: @window_fg_color;
+.nm-search-results row {
+    padding: 8px 12px;
+    border-radius: 7px;
+    margin: 2px 4px;
+    transition: background 110ms ease;
 }
 
+.nm-search-results row:hover {
+    background: @nm_accent_dim;
+}
+
+/* --- Content Cards --- */
+.nm-card,
+preferencesgroup > box {
+    background-color: @card_bg_color;
+    border: 1px solid @nm_border;
+    border-radius: 12px;
+    padding: 4px;
+}
+
+row {
+    border-radius: 7px;
+    transition: background 110ms ease;
+}
+
+row:hover {
+    background: rgba(255, 255, 255, 0.025);
+}
+
+/* --- Unsaved Changes Bar --- */
 .nm-dirty-bar {
-    background: rgba(147, 51, 234, 0.08);
-    border-top: 1px solid rgba(147, 51, 234, 0.2);
-    padding: 10px 24px;
+    background: rgba(155, 109, 255, 0.07);
+    border-top: 1px solid rgba(155, 109, 255, 0.18);
+    padding: 8px 20px;
 }
 
-/* Inline tag badges (used in window rules rows) */
+/* --- Niri Banner --- */
+.nm-niri-banner {
+    background: rgba(180, 110, 0, 0.10);
+    color: rgba(240, 180, 50, 0.90);
+    padding: 6px 16px;
+    font-size: 13px;
+    border-bottom: 1px solid rgba(180, 110, 0, 0.18);
+}
+
+/* --- Badges & Status --- */
+.nm-badge {
+    background: @nm_accent;
+    color: #111114;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 7px;
+    min-width: 16px;
+}
+
+/* --- Inline Tag Chips --- */
 .tag {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.06);
     color: @window_fg_color;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
+    border: 1px solid @nm_border_strong;
+    border-radius: 5px;
     font-size: 11px;
     font-weight: 600;
     padding: 1px 7px;
@@ -161,61 +169,48 @@ row:hover {
 
 .tag.accent {
     background: @nm_accent_dim;
-    color: rgba(192, 132, 252, 1.0);
-    border-color: rgba(147, 51, 234, 0.3);
-}
-
-.nm-niri-banner {
-    background: rgba(200, 130, 0, 0.12);
-    color: rgba(255, 190, 60, 1.0);
-    padding: 6px 16px;
-    font-size: 13px;
-    border-bottom: 1px solid rgba(200, 130, 0, 0.2);
-}
-
-/* --- Typography --- */
-
-.nm-page-title {
-    font-size: 24px;
-    font-weight: 800;
-    letter-spacing: -0.5px;
+    color: @nm_accent;
+    border-color: @nm_accent_border;
 }
 
 /* --- Buttons --- */
-
 button.suggested-action {
-    border-radius: 10px;
+    border-radius: 9px;
     font-weight: 600;
-    background: @nm_accent;
+    background: @nm_accent_mid;
 }
 
-/* --- Pulse Highlight (search) --- */
-
-@keyframes pulse-highlight {
-    0%   { background-color: transparent; }
-    15%  { background-color: rgba(147, 51, 234, 0.35); box-shadow: 0 0 12px rgba(147, 51, 234, 0.5); }
-    100% { background-color: transparent; box-shadow: none; }
+/* --- Toasts --- */
+toast {
+    background-color: @card_bg_color;
+    color: @card_fg_color;
+    border: 1px solid @nm_accent_border;
+    border-radius: 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+    margin-bottom: 20px;
 }
 
-.nm-pulse-highlight {
-    animation-name: pulse-highlight;
-    animation-duration: 1.5s;
-    animation-timing-function: ease-out;
+toast label { font-weight: 500; }
+
+/* --- Code Editor --- */
+.code-editor {
+    background-color: #0d0d10;
+    color: #e8e8ed;
+    border: 1px solid @nm_border;
+    border-radius: 10px;
 }
 
 /* --- Keyboard Visualizer --- */
-
 .nm-kb-action-panel {
     background-color: @card_bg_color;
     border: 1px solid @nm_border;
-    border-radius: 14px;
+    border-radius: 12px;
     padding: 4px;
 }
 
 .nm-kb-key-id-label {
     font-size: 20px;
-    font-weight: 800;
-    letter-spacing: -0.5px;
+    font-weight: 700;
     color: @window_fg_color;
 }
 
@@ -226,90 +221,73 @@ button.suggested-action {
 }
 
 /* --- Keycaps --- */
-
 .nm-keycap-main, .nm-keycap-mod {
-    background-color: rgba(147, 51, 234, 0.15);
-    border: 1px solid rgba(147, 51, 234, 0.35);
-    border-radius: 6px;
+    background-color: @nm_accent_dim;
+    border: 1px solid @nm_accent_border;
+    border-radius: 5px;
     padding: 2px 8px;
     font-size: 12px;
-    font-weight: 700;
-    color: rgba(192, 132, 252, 1.0);
-    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+    font-weight: 600;
+    color: @nm_accent;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
 }
 
 .nm-keycap-main {
-    background-color: rgba(147, 51, 234, 0.25);
-    border-color: rgba(168, 85, 247, 0.6);
-    color: rgba(216, 180, 254, 1.0);
-    font-weight: 800;
+    background-color: rgba(155, 109, 255, 0.22);
+    border-color: rgba(155, 109, 255, 0.45);
+    color: rgba(210, 190, 255, 1.0);
+    font-weight: 700;
 }
 
-.nm-keycap-mod {
-    opacity: 0.85;
-}
+.nm-keycap-mod { opacity: 0.80; }
 
-/* Binding list cards */
 .nm-keycap-purple {
-    background: rgba(88, 28, 135, 0.7);
-    color: rgba(216, 180, 254, 1.0);
-    border: 1px solid rgba(147, 51, 234, 0.5);
-    border-radius: 6px;
+    background: @nm_accent_dim;
+    color: @nm_accent;
+    border: 1px solid @nm_accent_border;
+    border-radius: 5px;
     padding: 2px 8px;
-    font-weight: bold;
+    font-weight: 600;
     font-size: 12px;
-    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
-}
-/* --- Toasts --- */
-
-toast {
-    background-color: @card_bg_color;
-    color: @card_fg_color;
-    border: 1px solid @nm_border_hover;
-    border-radius: 24px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-    margin-bottom: 24px;
 }
 
-toast label {
-    font-weight: 500;
+/* --- Pulse Highlight (search) --- */
+@keyframes pulse-highlight {
+    0%   { background-color: transparent; }
+    18%  { background-color: rgba(155, 109, 255, 0.28); }
+    100% { background-color: transparent; }
 }
 
-/* --- Code Editor --- */
-
-.code-editor {
-    background-color: #08080b;
-    color: #e8e8ec;
-    border: 1px solid @nm_border;
-    border-radius: 12px;
+.nm-pulse-highlight {
+    animation-name: pulse-highlight;
+    animation-duration: 1.4s;
+    animation-timing-function: ease-out;
 }
 
 /* --- Animations Page --- */
-
 .nm-anim-banner {
-    background: rgba(147, 51, 234, 0.10);
-    border: 1px solid rgba(147, 51, 234, 0.25);
-    border-radius: 12px;
+    background: @nm_accent_dim;
+    border: 1px solid @nm_accent_border;
+    border-radius: 10px;
     padding: 10px 16px;
-    color: rgba(192, 132, 252, 1.0);
+    color: @nm_accent;
 }
 
 .nm-anim-banner button {
-    background: rgba(147, 51, 234, 0.20);
-    border: 1px solid rgba(147, 51, 234, 0.35);
-    color: rgba(216, 180, 254, 1.0);
+    background: rgba(155, 109, 255, 0.15);
+    border: 1px solid @nm_accent_border;
+    color: @nm_accent;
     font-weight: 600;
-    border-radius: 20px;
+    border-radius: 8px;
     padding: 4px 14px;
 }
 
 .nm-anim-banner button:hover {
-    background: rgba(147, 51, 234, 0.35);
+    background: @nm_accent_hover;
 }
 
 .nm-preset-icon {
     font-size: 18px;
     min-width: 28px;
 }
-"""
-
+""".encode("utf-8")
