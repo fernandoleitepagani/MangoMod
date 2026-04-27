@@ -71,6 +71,3 @@ def delete_profile(name: str) -> bool:
         return True
     return False
 
-
-def profile_path(name: str) -> Path:
-    return PROFILES_DIR / name

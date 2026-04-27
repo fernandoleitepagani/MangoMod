@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import unittest
+import pytest
+pytest.importorskip("gi")
 
 from nirimod.kdl_parser import KdlNode, write_kdl
 from nirimod.pages.window_rules import (

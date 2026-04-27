@@ -791,10 +791,6 @@ def set_node_flag(parent: KdlNode, flag_name: str, enabled: bool) -> None:
         parent.children.remove(existing)
 
 
-def get_nodes_section(nodes: list[KdlNode], name: str) -> KdlNode | None:
-    return next((n for n in reversed(nodes) if n.name == name), None)
-
-
 def safe_switch_connect(switch_row, initial_value: bool, callback) -> None:
     switch_row._last_active = initial_value
 

@@ -118,13 +118,17 @@ install_pkgs() {
     zypper) sudo zypper install -y "${pkgs[@]}" ;;
     apt)    sudo apt-get update -qq && sudo apt-get install -y "${pkgs[@]}" ;;
     emerge)
-      error "Automatic package installation is not supported on Gentoo."
-      error "Please install the following packages manually using emerge:"
+      warn "Gentoo: can't auto-install packages, please do it yourself:"
       for pkg in "${pkgs[@]}"; do
-        echo -e "    ${CYAN}emerge $pkg${NC}"
+        echo -e "    ${CYAN}sudo emerge $pkg${NC}"
       done
-      error "Then re-run the installer with --skip-deps."
-      exit 1
+      echo ""
+      if ask "Already installed them? Continue?" n; then
+        info "Continuing..."
+      else
+        error "Install the packages above then re-run: bash install.sh --install --skip-deps"
+        exit 1
+      fi
       ;;
   esac
 }
@@ -291,6 +295,7 @@ check_dependencies() {
     warn "NiriMod requires niri to be running. Install it separately if needed."
     warn "  Arch:   sudo pacman -S niri"
     warn "  Fedora: sudo dnf install niri"
+    warn "  Gentoo: sudo emerge gui-wm/niri"
     echo ""
   fi
 

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import os
 import tempfile
+import pytest
+pytest.importorskip("gi")
+
 import unittest
 from unittest.mock import patch
 
