@@ -1141,13 +1141,18 @@ class AnimationsPage(BasePage):
         apply_btn.set_valign(Gtk.Align.CENTER)
         
         # Determine current curve for subtitle
+        # Support both new `curve "cubic-bezier" ...` and legacy `easing { bezier ... }` formats
+        curve_node = an.get_child("curve") if an else None
         easing = an.get_child("easing") if an else None
         current_curve = ""
-        if easing and easing.child_arg("bezier"):
+        if curve_node and len(curve_node.args) >= 5:
+            vals = " ".join(str(v) for v in curve_node.args[1:])
+            current_curve = f"cubic-bezier {vals}"
+        elif easing and easing.child_arg("bezier"):
             current_curve = f"bezier {easing.child_arg('bezier')}"
         elif easing and easing.args:
             current_curve = str(easing.args[0])
-            
+
         apply_row = Adw.ActionRow(title="Easing Curve", subtitle=current_curve if current_curve else "Default")
         apply_btn.connect("clicked", lambda *_, k=key, ar=apply_row: self._apply_bezier_to_anim(k, ar))
         apply_row.add_suffix(apply_btn)
@@ -1196,15 +1201,22 @@ class AnimationsPage(BasePage):
         if an is None:
             an = KdlNode(anim_key)
             anim.children.append(an)
-        easing = an.get_child("easing")
-        if easing is None:
-            easing = KdlNode("easing")
-            an.children.append(easing)
-            
+
+        # Remove legacy easing block if present
+        old_easing = an.get_child("easing")
+        if old_easing is not None:
+            an.children.remove(old_easing)
+
+        # Write correct Niri syntax: curve "cubic-bezier" x1 y1 x2 y2
+        curve_node = an.get_child("curve")
+        if curve_node is None:
+            curve_node = KdlNode("curve")
+            an.children.append(curve_node)
+        curve_node.args = ["cubic-bezier", round(x1, 3), round(y1, 3), round(x2, 3), round(y2, 3)]
+
         curve_str = f"{x1:.3f} {y1:.3f} {x2:.3f} {y2:.3f}"
-        set_child_arg(easing, "bezier", curve_str)
         self._commit(f"animation {anim_key} bezier")
         self.show_toast(f"Bezier applied to {anim_key}")
-        
+
         if apply_row:
-            apply_row.set_subtitle(f"bezier {curve_str}")
+            apply_row.set_subtitle(f"cubic-bezier {curve_str}")

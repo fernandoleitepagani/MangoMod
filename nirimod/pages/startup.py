@@ -148,12 +148,15 @@ class StartupPage(BasePage):
                 return
             is_sh = sh_switch.get_active()
             node_name = "spawn-sh-at-startup" if is_sh else "spawn-at-startup"
-            try:
-                args = shlex.split(cmd)
-            except ValueError:
-                # Fallback if user left an unclosed quote
-                args = cmd.split()
-                
+            if is_sh:
+                # sh -c expects a single string; store the whole command as one arg
+                args = [cmd]
+            else:
+                try:
+                    args = shlex.split(cmd)
+                except ValueError:
+                    args = cmd.split()
+
             new_node = KdlNode(node_name, args=args)
             entries = self._get_entries()
             if idx >= 0 and 0 <= idx < len(entries):

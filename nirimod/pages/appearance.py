@@ -113,7 +113,10 @@ class AppearancePage(BasePage):
         shadow_grp.add(draw_behind_row)
         content.append(shadow_grp)
 
-        blur_grp = Adw.PreferencesGroup(title="Blur (Global)")
+        blur_grp = Adw.PreferencesGroup(
+            title="Blur (Global)",
+            description="Requires Niri 26.04 or later. Sets the global blur quality parameters.",
+        )
         blur_node = next((n for n in nodes if n.name == "blur"), None)
 
         passes_val = int(blur_node.child_arg("passes") if blur_node else 0)
@@ -315,6 +318,15 @@ class AppearancePage(BasePage):
         self._commit("shadow color")
 
     def _set_blur(self, prop: str, value):
+        # If passes is being set to 0, remove the blur node entirely — it's
+        # a Niri 26.04+ feature and an empty/zero block causes a validation
+        # error on older versions.
+        if prop == "passes" and int(value) == 0:
+            blur_node = next((n for n in self._nodes if n.name == "blur"), None)
+            if blur_node is not None:
+                self._nodes.remove(blur_node)
+            self._commit("blur removed")
+            return
         blur_node = find_or_create(self._nodes, "blur")
         set_child_arg(blur_node, prop, value)
         self._commit(f"blur {prop}")
