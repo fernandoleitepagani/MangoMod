@@ -155,11 +155,22 @@ class InputPage(BasePage):
             safe_switch_connect(r, ini, lambda enabled, k=key: self._set_tp_flag(k, enabled))
             return r
 
+        def tp_bool_switch(key, label, default_active=True, subtitle=""):
+            r = Adw.SwitchRow(title=label, subtitle=subtitle)
+            node = tp_node.get_child(key)
+            if node is not None and node.args:
+                ini = bool(node.args[0])
+            else:
+                ini = default_active
+            r.set_active(ini)
+            safe_switch_connect(r, ini, lambda enabled, k=key: self._set_tp(k, enabled))
+            return r
+
         tp_expander.add_row(tp_switch("tap", "Tap to Click"))
         tp_expander.add_row(tp_switch("dwt", "Disable While Typing"))
         tp_expander.add_row(tp_switch("dwtp", "Disable While Trackpointing"))
         tp_expander.add_row(tp_switch("natural-scroll", "Natural Scroll"))
-        tp_expander.add_row(tp_switch("drag", "Tap Drag"))
+        tp_expander.add_row(tp_bool_switch("drag", "Tap Drag"))
         tp_expander.add_row(tp_switch("drag-lock", "Tap Drag Lock"))
         tp_expander.add_row(tp_switch("disabled-on-external-mouse", "Disable on External Mouse"))
 

@@ -65,6 +65,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         self._build_ui()
         self._check_onboarding()
         self._check_for_updates()
+        self._check_kofi()
 
     def _load_css(self):
         provider = Gtk.CssProvider()
@@ -527,6 +528,10 @@ class NiriModWindow(Adw.ApplicationWindow):
         reset_config_action.connect("activate", lambda *_: self._on_reset_config_clicked())
         self.add_action(reset_config_action)
 
+        open_kofi_action = Gio.SimpleAction.new("open_kofi", None)
+        open_kofi_action.connect("activate", lambda *_: self._show_kofi_dialog())
+        self.add_action(open_kofi_action)
+
     def get_nodes(self):
         return self.app_state.nodes
 
@@ -668,6 +673,42 @@ class NiriModWindow(Adw.ApplicationWindow):
         dialog.set_response_appearance("accept", Adw.ResponseAppearance.SUGGESTED)
         dialog.set_default_response("accept")
         dialog.connect("response", self._on_onboarding_response)
+        dialog.present(self)
+
+    def _check_kofi(self):
+        from nirimod import app_settings
+        if app_settings.get("kofi_dont_show", False):
+            return
+        self._show_kofi_dialog()
+
+    def _show_kofi_dialog(self):
+        from nirimod import app_settings
+
+        dialog = Adw.AlertDialog(
+            heading="Support NiriMod ☕",
+            body=(
+                "NiriMod is free and open-source.\n"
+                "If you find it useful, consider buying me a coffee /giving me a tip on Ko-fi — "
+                "it keeps the project alive!"
+            ),
+        )
+        dialog.add_response("dismiss", "Maybe Later")
+        dialog.add_response("kofi", "Support on Ko-fi")
+        dialog.set_response_appearance("kofi", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("kofi")
+
+        dont_show_check = Gtk.CheckButton(label="Don't show this again on startup")
+        dont_show_check.set_active(app_settings.get("kofi_dont_show", False))
+        dont_show_check.set_halign(Gtk.Align.CENTER)
+        dont_show_check.set_margin_top(4)
+        dialog.set_extra_child(dont_show_check)
+
+        def _on_kofi_response(dlg, response):
+            app_settings.set("kofi_dont_show", dont_show_check.get_active())
+            if response == "kofi":
+                Gio.AppInfo.launch_default_for_uri("https://ko-fi.com/srinivasr", None)
+
+        dialog.connect("response", _on_kofi_response)
         dialog.present(self)
 
     def _check_for_updates(self):
