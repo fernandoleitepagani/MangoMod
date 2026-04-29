@@ -14,92 +14,56 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, GObject, Gtk
 
-# Layout data (ported from src/Main.elm `keyboardLayout`)
-# Each entry: (key_id, display_label, width_units)
-# One unit ≈ pixel width / 56 * unit_count. Rows total 56 units each.
+from nirimod.xkb_helper import XkbHelper
 
-KEYBOARD_ROWS: list[list[tuple[str, str, int]]] = [
-    # Row 1 — number row
-    [
-        ("escape", "Esc", 4),
-        ("1", "1", 4),
-        ("2", "2", 4),
-        ("3", "3", 4),
-        ("4", "4", 4),
-        ("5", "5", 4),
-        ("6", "6", 4),
-        ("7", "7", 4),
-        ("8", "8", 4),
-        ("9", "9", 4),
-        ("0", "0", 4),
-        ("minus", "−", 4),
-        ("equal", "=", 4),
-        ("backspace", "Bksp", 8),
+# Geometry data: (key_id, width_units)
+# Rows total 60 units each.
+KEYBOARD_GEOMETRIES: dict[str, list[list[tuple[str, int]]]] = {
+    "ANSI": [
+        # Row 1 — number row
+        [("escape", 4), ("1", 4), ("2", 4), ("3", 4), ("4", 4), ("5", 4), ("6", 4), ("7", 4), ("8", 4), ("9", 4), ("0", 4), ("minus", 4), ("equal", 4), ("backspace", 8)],
+        # Row 2 — QWERTY
+        [("tab", 6), ("q", 4), ("w", 4), ("e", 4), ("r", 4), ("t", 4), ("y", 4), ("u", 4), ("i", 4), ("o", 4), ("p", 4), ("bracketleft", 4), ("bracketright", 4), ("backslash", 6)],
+        # Row 3 — home row
+        [("capslock", 7), ("a", 4), ("s", 4), ("d", 4), ("f", 4), ("g", 4), ("h", 4), ("j", 4), ("k", 4), ("l", 4), ("semicolon", 4), ("quote", 4), ("return", 9)],
+        # Row 4 — shift row
+        [("shiftleft", 7), ("z", 4), ("x", 4), ("c", 4), ("v", 4), ("b", 4), ("n", 4), ("m", 4), ("comma", 4), ("period", 4), ("slash", 4), ("shiftright", 5), ("up", 4), ("", 4)],
+        # Row 5 — bottom row
+        [("ctrlleft", 6), ("superleft", 6), ("altleft", 6), ("space", 24), ("altright", 6), ("left", 4), ("down", 4), ("right", 4)],
     ],
-    # Row 2 — QWERTY
-    [
-        ("tab", "Tab", 6),
-        ("q", "Q", 4),
-        ("w", "W", 4),
-        ("e", "E", 4),
-        ("r", "R", 4),
-        ("t", "T", 4),
-        ("y", "Y", 4),
-        ("u", "U", 4),
-        ("i", "I", 4),
-        ("o", "O", 4),
-        ("p", "P", 4),
-        ("bracketleft", "[", 4),
-        ("bracketright", "]", 4),
-        ("backslash", "\\", 6),
-    ],
-    # Row 3 — home row
-    [
-        ("capslock", "Caps", 7),
-        ("a", "A", 4),
-        ("s", "S", 4),
-        ("d", "D", 4),
-        ("f", "F", 4),
-        ("g", "G", 4),
-        ("h", "H", 4),
-        ("j", "J", 4),
-        ("k", "K", 4),
-        ("l", "L", 4),
-        ("semicolon", ";", 4),
-        ("quote", "'", 4),
-        ("return", "Enter", 9),
-    ],
-    # Row 4 — shift row
-    # shiftleft: 7, letters: 40, shiftright: 5, up: 4, spacer: 4 → total 60
-    # This puts ↑ at units 52-56, directly above ↓ (also 52-56 in row 5).
-    [
-        ("shiftleft", "Shift", 7),
-        ("z", "Z", 4),
-        ("x", "X", 4),
-        ("c", "C", 4),
-        ("v", "V", 4),
-        ("b", "B", 4),
-        ("n", "N", 4),
-        ("m", "M", 4),
-        ("comma", ",", 4),
-        ("period", ".", 4),
-        ("slash", "/", 4),
-        ("shiftright", "Shift", 5),
-        ("up", "↑", 4),
-        ("", "", 4),  # spacer — keeps row at 60 units
-    ],
-    # Row 5 — bottom row
-    [
-        ("ctrlleft", "Ctrl", 6),
-        ("superleft", "Super", 6),
-        ("altleft", "Alt", 6),
-        ("space", "", 24),
-        ("altright", "Alt", 6),
-        ("left", "←", 4),
-        ("down", "↓", 4),
-        ("right", "→", 4),
-    ],
-]
+    "ISO": [
+        # Row 1 — number row
+        [("escape", 4), ("grave", 4), ("1", 4), ("2", 4), ("3", 4), ("4", 4), ("5", 4), ("6", 4), ("7", 4), ("8", 4), ("9", 4), ("0", 4), ("minus", 4), ("equal", 4), ("backspace", 4)],
+        # Row 2 — QWERTY
+        [("tab", 6), ("q", 4), ("w", 4), ("e", 4), ("r", 4), ("t", 4), ("y", 4), ("u", 4), ("i", 4), ("o", 4), ("p", 4), ("bracketleft", 4), ("bracketright", 4), ("return", 6)],
+        # Row 3 — home row
+        [("capslock", 7), ("a", 4), ("s", 4), ("d", 4), ("f", 4), ("g", 4), ("h", 4), ("j", 4), ("k", 4), ("l", 4), ("semicolon", 4), ("quote", 4), ("backslash", 4), ("return", 5)],
+        # Row 4 — shift row
+        [("shiftleft", 4), ("less", 4), ("z", 4), ("x", 4), ("c", 4), ("v", 4), ("b", 4), ("n", 4), ("m", 4), ("comma", 4), ("period", 4), ("slash", 4), ("shiftright", 4), ("up", 4), ("", 4)],
+        # Row 5 — bottom row
+        [("ctrlleft", 6), ("superleft", 6), ("altleft", 6), ("space", 24), ("altright", 6), ("left", 4), ("down", 4), ("right", 4)],
+    ]
+}
+
+_KID_TO_KEYCODE = {
+    # Row 1
+    "escape": 1, "grave": 41, "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "7": 8, "8": 9, "9": 10, "0": 11, "minus": 12, "equal": 13, "backspace": 14,
+    # Row 2
+    "tab": 15, "q": 16, "w": 17, "e": 18, "r": 19, "t": 20, "y": 21, "u": 22, "i": 23, "o": 24, "p": 25, "bracketleft": 26, "bracketright": 27, "backslash": 43,
+    # Row 3
+    "capslock": 58, "a": 30, "s": 31, "d": 32, "f": 33, "g": 34, "h": 35, "j": 36, "k": 37, "l": 38, "semicolon": 39, "quote": 40, "return": 28,
+    # Row 4
+    "shiftleft": 42, "less": 94, "z": 44, "x": 45, "c": 46, "v": 47, "b": 48, "n": 49, "m": 50, "comma": 51, "period": 52, "slash": 53, "shiftright": 54, "up": 103,
+    # Row 5
+    "ctrlleft": 29, "superleft": 125, "altleft": 56, "space": 57, "altright": 100, "left": 105, "down": 108, "right": 106
+}
+
+# Static fallbacks for modifiers and special keys
+_STATIC_LABELS = {
+    "escape": "Esc", "backspace": "Bksp", "tab": "Tab", "return": "Enter", "capslock": "Caps",
+    "shiftleft": "Shift", "shiftright": "Shift", "ctrlleft": "Ctrl", "superleft": "Super",
+    "altleft": "Alt", "altright": "Alt", "up": "↑", "down": "↓", "left": "←", "right": "→", "space": ""
+}
 
 # Keys to skip when building lookup (modifier-only keys don't bind in niri)
 _MODIFIER_KEY_IDS = {
@@ -197,9 +161,15 @@ class KeyboardVisualizer(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=12)
 
         # State
+        self._layout_id: str = "us"
+        self._geometry_id: str = "ANSI"
         self._bindings: dict[str, list[dict]] = {}  # key_id → [bind_dict, ...]
         self._selected_id: str | None = None
         self._search_q: str = ""
+        self._dynamic_keysym_to_kid: dict[str, str] = {}
+        
+        self._xkb = XkbHelper()
+        self._xkb.set_layout(self._layout_id)
 
         # Precompute flat list for hit-tests
         self._key_rects: list[tuple[str, float, float, float, float]] = []
@@ -244,6 +214,28 @@ class KeyboardVisualizer(Gtk.Box):
                 self._selected_id, self._bindings.get(self._selected_id, [])
             )
 
+    def set_layout(self, layout_id: str) -> None:
+        """Set the visualizer layout mapping (e.g. 'us', 'it')."""
+        self._layout_id = layout_id
+        self._xkb.set_layout(layout_id)
+        
+        # try to guess if we should use ISO or ANSI physical keys
+        # most european layouts use the big L-shaped enter key (ISO)
+        base_layout = layout_id.split(":")[0].lower()
+        iso_layouts = {'it', 'fr', 'de', 'es', 'pt', 'uk', 'ru', 'ch', 'be', 'no', 'se', 'fi', 'dk'}
+        if base_layout in iso_layouts:
+            self._geometry_id = "ISO"
+        else:
+            self._geometry_id = "ANSI"
+            
+        self._dynamic_keysym_to_kid.clear()
+        for kid, keycode in _KID_TO_KEYCODE.items():
+            sym = self._xkb.get_keysym_name(keycode)
+            if sym:
+                self._dynamic_keysym_to_kid[sym.lower()] = kid
+            
+        self._area.queue_draw()
+
     def set_search(self, query: str) -> None:
         self._search_q = query.strip().lower()
         self._area.queue_draw()
@@ -285,7 +277,8 @@ class KeyboardVisualizer(Gtk.Box):
         inner_w = width - 2 * pad_x
         inner_h = height - 2 * pad_y
 
-        n_rows = len(KEYBOARD_ROWS)
+        active_geom = KEYBOARD_GEOMETRIES.get(self._geometry_id) or KEYBOARD_GEOMETRIES["ANSI"]
+        n_rows = len(active_geom)
         row_h = inner_h / n_rows
         key_gap = max(4.0, row_h * 0.12)
         radius = max(4.0, row_h * 0.18)
@@ -299,19 +292,31 @@ class KeyboardVisualizer(Gtk.Box):
         cr.stroke()
 
         # Compute max row width from actual layout data (rows are all equal)
-        total_units = max(sum(w for _, _, w in row) for row in KEYBOARD_ROWS)
+        total_units = max(sum(w for _, w in row) for row in active_geom)
 
-        for row_idx, row in enumerate(KEYBOARD_ROWS):
+        for row_idx, row in enumerate(active_geom):
             y = float(pad_y + row_idx * row_h)
             x = float(pad_x)
 
-            for kid, label, units in row:
+            for kid, units in row:
                 key_w = (units / total_units) * inner_w
 
                 # Spacer key — advance x but draw nothing
                 if not kid:
                     x += key_w
                     continue
+                
+                # Fetch dynamic label
+                label = _STATIC_LABELS.get(kid)
+                if label is None:
+                    keycode = _KID_TO_KEYCODE.get(kid)
+                    if keycode:
+                        label = self._xkb.get_label(keycode)
+                
+                if label is None:
+                    label = kid.upper() if len(kid) <= 1 else kid.capitalize()
+                else:
+                    label = label.upper() if len(label) == 1 else label
                 key_rect_x = x + key_gap / 2
                 key_rect_y = y + key_gap / 2
                 key_rect_w = key_w - key_gap

@@ -122,6 +122,9 @@ install_pkgs() {
       for pkg in "${pkgs[@]}"; do
         echo -e "    ${CYAN}sudo emerge $pkg${NC}"
       done
+      if [[ " ${pkgs[*]} " =~ " dev-python/pygobject " ]]; then
+        echo -e "    ${YELLOW}Note: Ensure dev-python/pygobject is built with the 'cairo' USE flag!${NC}"
+      fi
       echo ""
       if ask "Already installed them? Continue?" n; then
         info "Continuing..."
@@ -138,8 +141,8 @@ pkg_installed() {
   local pkg="$1"
   case "$PM" in
     pacman) pacman -Qi "$pkg" &>/dev/null ;;
-    dnf)    rpm -q "$pkg" &>/dev/null ;;
-    zypper) rpm -q "$pkg" &>/dev/null ;;
+    dnf)    rpm -q "$pkg" &>/dev/null || rpm -q --whatprovides "$pkg" &>/dev/null ;;
+    zypper) rpm -q "$pkg" &>/dev/null || rpm -q --whatprovides "$pkg" &>/dev/null ;;
     apt)    dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed" ;;
     emerge) command -v qlist &>/dev/null && qlist -I "$pkg" &>/dev/null || return 1 ;;
   esac
@@ -193,11 +196,10 @@ resolve_deps() {
     dnf)
       pkg_installed gtk4           || MISSING+=("gtk4") ;;
     zypper)
-      pkg_installed gtk4           || MISSING+=("gtk4" "gtk4-devel") ;;
+      # libgtk-4-1 is the real package name; gtk4 is the capability it provides
+      pkg_installed libgtk-4-1     || MISSING+=("libgtk-4-1") ;;
     apt)
-      pkg_installed libgtk-4-1    2>/dev/null || \
-      pkg_installed libgtk-4-dev  2>/dev/null || \
-        MISSING+=("libgtk-4-dev" "gir1.2-gtk-4.0") ;;
+      pkg_installed libgtk-4-1     || MISSING+=("libgtk-4-1") ;;
     emerge)
       pkg_installed gui-libs/gtk   || MISSING+=("gui-libs/gtk") ;;
   esac
@@ -209,12 +211,10 @@ resolve_deps() {
     dnf)
       pkg_installed libadwaita           || MISSING+=("libadwaita") ;;
     zypper)
-      pkg_installed libadwaita-1-0       2>/dev/null || \
-        MISSING+=("libadwaita" "libadwaita-devel") ;;
+      # libadwaita-1-0 is the real package; typelib is pulled in automatically
+      pkg_installed libadwaita-1-0       || MISSING+=("libadwaita-1-0") ;;
     apt)
-      pkg_installed libadwaita-1-0       2>/dev/null || \
-      pkg_installed libadwaita-1-dev     2>/dev/null || \
-        MISSING+=("libadwaita-1-dev" "gir1.2-adw-1") ;;
+      pkg_installed libadwaita-1-0       || MISSING+=("libadwaita-1-0") ;;
     emerge)
       pkg_installed gui-libs/libadwaita  || MISSING+=("gui-libs/libadwaita") ;;
   esac
@@ -226,30 +226,31 @@ resolve_deps() {
     dnf)
       pkg_installed python3-gobject || \
       pkg_installed python3-gobject-base || \
-        MISSING+=("python3-gobject" "python3-gobject-base") ;;
+        MISSING+=("python3-gobject") ;;
     zypper)
-      pkg_installed python3-gobject || \
-        MISSING+=("python3-gobject" "typelib-1_0-Gtk-4_0" "typelib-1_0-Adw-1") ;;
+      # Use --whatprovides so python313-gobject etc. are found via the python3-gobject capability
+      pkg_installed python3-gobject || MISSING+=("python3-gobject") ;;
     apt)
-      pkg_installed python3-gi 2>/dev/null || \
-        MISSING+=("python3-gi" "python3-gi-cairo") ;;
+      pkg_installed python3-gi || MISSING+=("python3-gi" "python3-gi-cairo") ;;
     emerge)
-      pkg_installed dev-python/pygobject || MISSING+=("dev-python/pygobject") ;;
+      pkg_installed dev-python/pygobject || MISSING+=("dev-python/pygobject")
+      pkg_installed dev-python/pycairo || MISSING+=("dev-python/pycairo")
+      ;;
   esac
 
   # GObject typelibs (needed at runtime for gi.require_version)
   case "$PM" in
     dnf)
-      rpm -q gtk4 &>/dev/null            || MISSING+=("gtk4")
-      rpm -q libadwaita &>/dev/null      || MISSING+=("libadwaita")
+      pkg_installed gtk4       || MISSING+=("gtk4")
+      pkg_installed libadwaita || MISSING+=("libadwaita")
       ;;
     zypper)
-      rpm -q typelib-1_0-Gtk-4_0 &>/dev/null || MISSING+=("typelib-1_0-Gtk-4_0")
-      rpm -q typelib-1_0-Adw-1   &>/dev/null || MISSING+=("typelib-1_0-Adw-1")
+      pkg_installed typelib-1_0-Gtk-4_0 || MISSING+=("typelib-1_0-Gtk-4_0")
+      pkg_installed typelib-1_0-Adw-1   || MISSING+=("typelib-1_0-Adw-1")
       ;;
     apt)
-      pkg_installed gir1.2-gtk-4.0 2>/dev/null || MISSING+=("gir1.2-gtk-4.0")
-      pkg_installed gir1.2-adw-1   2>/dev/null || MISSING+=("gir1.2-adw-1")
+      pkg_installed gir1.2-gtk-4.0 || MISSING+=("gir1.2-gtk-4.0")
+      pkg_installed gir1.2-adw-1   || MISSING+=("gir1.2-adw-1")
       ;;
   esac
 

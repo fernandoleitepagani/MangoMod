@@ -157,13 +157,17 @@ def _write_binds_to_node(binds_list: list[dict], binds_node: KdlNode):
         binds_node.children.append(child)
 
 
-def _build_key_bindings_map(binds: list[dict]) -> dict[str, list[dict]]:
-    """Group binds by their normalised keyboard key-id."""
+def _build_key_bindings_map(binds: list[dict], viz=None) -> dict[str, list[dict]]:
+    # bucket binds by their actual physical key ID so the visualizer can highlight them
     result: dict[str, list[dict]] = {}
     for b in binds:
         keysym = b.get("keysym", "")
-        raw_key = keysym.split("+")[-1]
-        kid = normalize_key_id(raw_key)
+        raw_key = keysym.split("+")[-1].lower()
+        kid = None
+        if viz and viz._dynamic_keysym_to_kid:
+            kid = viz._dynamic_keysym_to_kid.get(raw_key)
+        if not kid:
+            kid = normalize_key_id(raw_key)
         result.setdefault(kid, []).append(b)
     return result
 
@@ -207,11 +211,38 @@ class BindingsPage(BasePage):
         title_vbox.append(self._kb_stats_header)
         header_box.append(title_vbox)
 
+        # Layout Selector (shown only on Keyboard tab)
+        from nirimod import app_settings
+        from nirimod.xkb_helper import XkbHelper
+        
+        self._layouts = XkbHelper.get_available_layouts()
+        layout_names = [d for _, d in self._layouts]
+        self._layout_model = Gtk.StringList.new(layout_names)
+        self._layout_combo = Gtk.DropDown(model=self._layout_model)
+        self._layout_combo.set_valign(Gtk.Align.CENTER)
+        self._layout_combo.set_enable_search(True)
+        
+        # Priority: Settings > Niri Config > US
+        saved_layout = app_settings.get("kb_layout")
+        if not saved_layout:
+            saved_layout = self._get_current_niri_layout() or "us"
+            
+        selected_idx = 0
+        for i, (lid, _) in enumerate(self._layouts):
+            if lid == saved_layout:
+                selected_idx = i
+                break
+        self._layout_combo.set_selected(selected_idx)
+            
+        self._layout_combo.connect("notify::selected", self._on_layout_changed)
+        header_box.append(self._layout_combo)
+
         # Add Button (hidden by default, shown on List tab)
         self._add_btn = Gtk.Button(icon_name="list-add-symbolic")
         self._add_btn.set_tooltip_text("Add binding")
         self._add_btn.add_css_class("flat")
         self._add_btn.add_css_class("circular")
+        self._add_btn.set_valign(Gtk.Align.CENTER)
         self._add_btn.set_visible(False)
         self._add_btn.connect("clicked", self._on_add_clicked)
         header_box.append(self._add_btn)
@@ -221,7 +252,7 @@ class BindingsPage(BasePage):
         
         switcher_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         switcher_box.add_css_class("linked")
-        switcher_box.set_valign(Gtk.Align.START)
+        switcher_box.set_valign(Gtk.Align.CENTER)
         
         self._btn_physical = Gtk.ToggleButton(label="Physical")
         self._btn_list = Gtk.ToggleButton(label="List View")
@@ -252,12 +283,41 @@ class BindingsPage(BasePage):
         self._start_file_monitor()
         return tb
 
+    def _get_current_niri_layout(self):
+        try:
+            from nirimod import kdl_parser
+            nodes = kdl_parser.load_niri_config()
+            for node in nodes:
+                if node.name == "input":
+                    kb = node.get_child("keyboard")
+                    if kb:
+                        xkb = kb.get_child("xkb")
+                        if xkb:
+                            l = xkb.child_arg("layout")
+                            v = xkb.child_arg("variant")
+                            if l:
+                                return f"{l}:{v}" if v else l
+        except Exception:
+            pass
+        return None
+
+    def _on_layout_changed(self, dropdown, param):
+        from nirimod import app_settings
+        idx = dropdown.get_selected()
+        if idx < len(self._layouts):
+            layout_id = self._layouts[idx][0]
+            app_settings.set("kb_layout", layout_id)
+            if self._viz:
+                self._viz.set_layout(layout_id)
+
     def _on_view_toggle(self, btn):
         if not btn.get_active():
             return
         is_list = btn == self._btn_list
         self._view_stack.set_visible_child_name("list" if is_list else "keyboard")
         self._add_btn.set_visible(is_list)
+        if hasattr(self, "_layout_combo"):
+            self._layout_combo.set_visible(not is_list)
 
     def _build_list_tab(self) -> Gtk.Widget:
         """Return the scrollable list editor widget (original UI)."""
@@ -348,7 +408,13 @@ class BindingsPage(BasePage):
     def _refresh_visualizer(self):
         if self._viz is None:
             return
-        binds_map = _build_key_bindings_map(self._binds)
+        from nirimod import app_settings
+        layout_id = app_settings.get("kb_layout")
+        if not layout_id:
+            layout_id = self._get_current_niri_layout() or "us"
+        self._viz.set_layout(layout_id)
+        
+        binds_map = _build_key_bindings_map(self._binds, self._viz)
         self._viz.set_bindings(binds_map)
         self._viz.set_search(self._kb_search_query)
         n_total = len(self._binds)

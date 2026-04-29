@@ -677,6 +677,25 @@ class NiriModWindow(Adw.ApplicationWindow):
 
     def _check_kofi(self):
         from nirimod import app_settings
+        import subprocess, os
+        from nirimod.updater import INSTALL_DIR
+        
+        # if the user just updated the app, we want to pop the donation dialog again
+        # even if they previously dismissed it. easiest way is checking the git hash.
+        current_hash = ""
+        try:
+            if os.path.isdir(os.path.join(INSTALL_DIR, ".git")):
+                current_hash = subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"], cwd=INSTALL_DIR, text=True, stderr=subprocess.DEVNULL
+                ).strip()
+        except Exception:
+            pass
+            
+        last_hash = app_settings.get("kofi_last_hash", "")
+        if current_hash and current_hash != last_hash:
+            app_settings.set("kofi_last_hash", current_hash)
+            app_settings.set("kofi_dont_show", False)
+
         if app_settings.get("kofi_dont_show", False):
             return
         self._show_kofi_dialog()
@@ -685,11 +704,11 @@ class NiriModWindow(Adw.ApplicationWindow):
         from nirimod import app_settings
 
         dialog = Adw.AlertDialog(
-            heading="Support NiriMod ☕",
+            heading="Enjoying NiriMod? ☕",
             body=(
-                "NiriMod is free and open-source.\n"
-                "If you find it useful, consider buying me a coffee /giving me a tip on Ko-fi — "
-                "it keeps the project alive!"
+                "NiriMod is a passion project built entirely in my free time to make customizing Niri easier for everyone.\n\n"
+                "If it has improved your workflow, please consider supporting its development with a small tip on Ko-fi! "
+                "Your support directly fuels new features and keeps the project alive."
             ),
         )
         dialog.add_response("dismiss", "Maybe Later")
