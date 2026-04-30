@@ -1064,16 +1064,17 @@ class AnimationsPage(BasePage):
                 (n for n in reversed(user_nodes) if n.name == "animations"), None
             )
 
-            # Snapshot current state BEFORE overwriting
-            from nirimod.kdl_parser import write_kdl
-            if user_anim is not None:
-                snap_node = KdlNode(name="animations")
-                snap_node.children = list(user_anim.children)
-                snap_node.args = list(user_anim.args)
-                snap_node.props = dict(user_anim.props)
-                self._prev_anim_snapshot = write_kdl([snap_node])
-            else:
-                self._prev_anim_snapshot = write_kdl([])
+
+            if self._prev_anim_snapshot is None:
+                from nirimod.kdl_parser import write_kdl
+                if user_anim is not None:
+                    snap_node = KdlNode(name="animations")
+                    snap_node.children = list(user_anim.children)
+                    snap_node.args = list(user_anim.args)
+                    snap_node.props = dict(user_anim.props)
+                    self._prev_anim_snapshot = write_kdl([snap_node])
+                else:
+                    self._prev_anim_snapshot = write_kdl([])
 
             if user_anim is None:
                 user_anim = KdlNode(name="animations")
@@ -1141,7 +1142,7 @@ class AnimationsPage(BasePage):
         apply_btn.set_valign(Gtk.Align.CENTER)
         
         # Determine current curve for subtitle
-        # Support both new `curve "cubic-bezier" ...` and legacy `easing { bezier ... }` formats
+
         curve_node = an.get_child("curve") if an else None
         easing = an.get_child("easing") if an else None
         current_curve = ""

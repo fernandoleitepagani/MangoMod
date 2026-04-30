@@ -579,28 +579,24 @@ class BindingsPage(BasePage):
             self._viz.set_search(self._kb_search_query)
 
     def _on_kb_key_selected(self, viz, key_id: str):
-        # The visualizer's action panel already updates itself;
-        # we can optionally jump to the list tab and highlight the binding.
         pass
 
     def _on_kb_edit_binding(self, viz, bind_dict):
         try:
-            # Locate the actual bind in our list
             idx = self._binds.index(bind_dict)
             self._show_bind_dialog(bind_dict, idx)
         except ValueError:
             pass
 
     def _on_kb_add_binding(self, viz, key_id: str):
-        # Create a new empty bind pre-filled with the selected key
-        # We try to make it look like a valid keysym (e.g. "T" instead of "t")
+
         if len(key_id) == 1:
-            key_id = key_id.upper()
+            display_key = key_id.upper()
         else:
-            key_id = key_id.capitalize()
-            
+            display_key = key_id.capitalize()
+
         new_bind = {
-            "keysym": key_id,
+            "keysym": f"Mod+{display_key}",
             "action": "",
             "action_args": [],
             "allow_when_locked": False,

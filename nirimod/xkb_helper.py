@@ -2,7 +2,6 @@ import ctypes
 import ctypes.util
 import os
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 class XkbHelper:
     def __init__(self):
@@ -13,12 +12,24 @@ class XkbHelper:
         
         path = ctypes.util.find_library("xkbcommon")
         if not path:
-            # check common paths just in case find_library acts up
-            for p in ["/usr/lib/libxkbcommon.so.0", "/usr/lib64/libxkbcommon.so.0", "/lib/x86_64-linux-gnu/libxkbcommon.so.0"]:
+
+            for p in [
+                "/usr/lib/libxkbcommon.so.0",
+                "/usr/lib64/libxkbcommon.so.0",
+                "/lib/x86_64-linux-gnu/libxkbcommon.so.0",
+                "/usr/lib/x86_64-linux-gnu/libxkbcommon.so.0",
+
+                "/usr/lib/libxkbcommon.so",
+                "/usr/lib64/libxkbcommon.so",
+
+                "/lib/libxkbcommon.so.0",
+
+                "/run/current-system/sw/lib/libxkbcommon.so.0",
+            ]:
                 if os.path.exists(p):
                     path = p
                     break
-        
+
         if not path:
             return
 
@@ -85,7 +96,7 @@ class XkbHelper:
         if not self.state:
             return None
         
-        # xkb keycodes are always evdev + 8
+
         xkb_keycode = keycode + 8
         
         buf = ctypes.create_string_buffer(32)
@@ -111,10 +122,15 @@ class XkbHelper:
 
     @staticmethod
     def get_available_layouts() -> list[tuple[str, str]]:
-        # rip through the system's evdev.xml to find every layout we can use
+
         paths = [
             "/usr/share/X11/xkb/rules/evdev.xml",
-            "/usr/share/X11/xkb/rules/base.xml"
+            "/usr/share/X11/xkb/rules/base.xml",
+
+            "/usr/share/xkb/rules/evdev.xml",
+            "/usr/share/xkb/rules/base.xml",
+
+            "/run/current-system/sw/share/X11/xkb/rules/evdev.xml",
         ]
         layouts = []
         for p in paths:
@@ -130,7 +146,7 @@ class XkbHelper:
                             if name and desc:
                                 layouts.append((name, desc))
                                 
-                        # grab variants too (like dvorak, colemak, etc)
+
                         variant_list = layout.find("variantList")
                         if variant_list is not None:
                             for variant in variant_list.findall("variant"):
@@ -148,5 +164,5 @@ class XkbHelper:
                 except Exception:
                     continue
         
-        # fallback to a tiny list if xml parsing explodes
+
         return [("us", "English (US)"), ("us:dvorak", "English (Dvorak)"), ("it", "Italian"), ("fr", "French"), ("de", "German"), ("es", "Spanish")]

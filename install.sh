@@ -235,6 +235,8 @@ resolve_deps() {
     emerge)
       pkg_installed dev-python/pygobject || MISSING+=("dev-python/pygobject")
       pkg_installed dev-python/pycairo || MISSING+=("dev-python/pycairo")
+      pkg_installed dev-libs/libxkbcommon || MISSING+=("dev-libs/libxkbcommon")
+      pkg_installed x11-misc/xkeyboard-config || MISSING+=("x11-misc/xkeyboard-config")
       ;;
   esac
 

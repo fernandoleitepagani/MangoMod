@@ -135,7 +135,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         self._search_entry.add_controller(key_ctrl)
         sidebar_box.append(self._search_entry)
 
-        # Inline results panel using a Revealer -- no Popover, no focus shift
+
         self._search_revealer = Gtk.Revealer()
         self._search_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
         self._search_revealer.set_transition_duration(120)
@@ -236,7 +236,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         self._stack.set_vexpand(True)
         content_root.append(self._stack)
 
-        # Build all pages lazily (add placeholders now, build on first visit)
+
         self._build_all_pages()
         self._build_search_index()
 
@@ -332,7 +332,7 @@ class NiriModWindow(Adw.ApplicationWindow):
             return
         pid = getattr(row, "page_id", None)
         if pid:
-            # Deselect all other listboxes to maintain single-selection across sections
+
             for other_pid, lb in self._sidebar_listboxes.items():
                 if lb is not _lb:
                     lb.unselect_all()
@@ -351,7 +351,7 @@ class NiriModWindow(Adw.ApplicationWindow):
             if row:
                 if pid == page_id:
                     lb.select_row(row)
-                # others will be cleared via _on_row_selected cross-deselect
+
 
         # Notify page of visibility
         page = self._pages.get(page_id)
@@ -362,7 +362,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         self._search_index: list[dict] = []
 
         def traverse(widget, pid, p_title):
-            # Index PreferencesRows (ActionRow, SwitchRow, ExpanderRow, SpinRow, etc.)
+
             if isinstance(widget, Adw.PreferencesRow):
                 title = widget.get_title()
                 if title:
@@ -375,7 +375,7 @@ class NiriModWindow(Adw.ApplicationWindow):
                         "widget": widget,
                     })
 
-            # Index PreferencesGroups (provides search matches for section headers like "Focus Ring")
+
             if isinstance(widget, Adw.PreferencesGroup):
                 title = widget.get_title()
                 if title:
@@ -642,7 +642,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         self.mark_dirty()
         self.notify_nodes_changed()
 
-    def show_toast(self, message: str, timeout: int = 3, copy_text: str = None):
+    def show_toast(self, message: str, timeout: int = 3, copy_text: str | None = None):
         toast = Adw.Toast(title=message, timeout=timeout)
         if copy_text is not None:
             toast.set_button_label("Copy")
@@ -680,8 +680,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         import subprocess, os
         from nirimod.updater import INSTALL_DIR
         
-        # if the user just updated the app, we want to pop the donation dialog again
-        # even if they previously dismissed it. easiest way is checking the git hash.
+
         current_hash = ""
         try:
             if os.path.isdir(os.path.join(INSTALL_DIR, ".git")):
@@ -771,7 +770,7 @@ class NiriModWindow(Adw.ApplicationWindow):
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(p, dest)
                     except ValueError:
-                        # Fallback if the source file is not under NIRI_CONFIG.parent
+
                         shutil.copy2(p, BACKUP_DIR / p.name)
             self.show_toast(f"Backup created in {BACKUP_DIR} ✓")
         except Exception as e:
@@ -910,7 +909,7 @@ class NiriModWindow(Adw.ApplicationWindow):
     def _delete_profile(self, name: str, dialog):
         prof_mod.delete_profile(name)
         self.show_toast(f"Profile '{name}' deleted")
-        # rebuild in-place so they don't have to reopen the dialog
+
         extra = dialog.get_extra_child()
         if extra:
             dialog.set_extra_child(None)

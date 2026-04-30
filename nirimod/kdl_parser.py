@@ -180,9 +180,7 @@ def _lex(text: str) -> list[tuple[str, str]]:
                 tokens.append((_TOK_RAW_STRING, raw))
                 in_node = True
                 continue
-            # Not a raw string — fall through to identifier parsing
 
-        # quoted string
         if text[i] == '"':
             j = i + 1
             s = ""
@@ -207,12 +205,8 @@ def _lex(text: str) -> list[tuple[str, str]]:
             i = j + 1
             continue
 
-        # plain token (identifier, number, keyword)
         j = i
         while j < n and text[j] not in ' \t\r\n;{}"\\':
-            # Property values can be written as raw strings, e.g.
-            # title=r#"^notificationtoasts_\d+_desktop$"#. Stop after the
-            # '=' so the raw-string lexer below can preserve backslashes.
             if text[j] == "=" and j + 1 < n and text[j + 1] == "r":
                 k = j + 2
                 while k < n and text[k] == "#":
@@ -423,9 +417,6 @@ def _resolve_includes(
     base: Path,
     depth: int = 0,
 ) -> tuple[list[KdlNode], list[tuple[KdlNode, Path]]]:
-    # Flatten all included files into a single node list, tracking which file
-    # each node came from (source_file) and its original position in the primary
-    # config (_primary_order) so we can put it back in the right place on save.
     flat: list[KdlNode] = []
     slots: list[tuple[KdlNode, Path]] = []
 
@@ -433,7 +424,7 @@ def _resolve_includes(
         if node.name != "include" or depth > 5:
             node.source_file = base
             if depth == 0:
-                node._primary_order = i  # type: ignore[attr-defined]
+                node._primary_order = i  
             flat.append(node)
             continue
 
@@ -441,13 +432,13 @@ def _resolve_includes(
         if not node.args:
             node.source_file = base
             if depth == 0:
-                node._primary_order = i  # type: ignore[attr-defined]
+                node._primary_order = i  
             flat.append(node)
             continue
 
         node.source_file = base
         if depth == 0:
-            node._primary_order = i  # type: ignore[attr-defined]
+            node._primary_order = i  
         target = base.parent / node.args[0]
         slots.append((node, target))
 
@@ -474,8 +465,6 @@ def load_niri_config_multi() -> tuple[list[KdlNode], list[tuple[KdlNode, Path]]]
 
 
 def _atomic_write(path: Path, content: str) -> None:
-    # Skip if nothing changed — avoids triggering niri's config watcher
-    # for files that we touched but didn't actually modify.
     if path.exists() and path.read_text() == content:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -483,10 +472,15 @@ def _atomic_write(path: Path, content: str) -> None:
     try:
         os.write(fd, content.encode())
         os.close(fd)
+        fd = -1
         os.replace(tmp, path)
     except Exception:
-        os.close(fd)
-        os.unlink(tmp)
+        if fd != -1:
+            os.close(fd)
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
         raise
 
 
@@ -494,16 +488,10 @@ def save_niri_config_multi(
     nodes: list[KdlNode],
     include_slots: list[tuple[KdlNode, Path]],
 ) -> None:
-    # Figure out which file is the "main" one. Normally config.kdl, but we
-    # read it from the slots so we're not hardcoded to a specific path.
     primary = NIRI_CONFIG
     if include_slots and include_slots[0][0].source_file is not None:
         primary = include_slots[0][0].source_file
 
-    # If a node was just created (source_file=None), try to route it to the
-    # same file as existing nodes of the same type. That way a new window-rule
-    # goes to rules.kdl, a new spawn-at-startup goes to startup.kdl, etc.
-    # Genuinely new node types with no existing home fall back to config.kdl.
     name_to_file: dict[str, Path] = {}
     for node in nodes:
         if node.source_file is not None and node.source_file != primary:
@@ -525,8 +513,6 @@ def save_niri_config_multi(
     for path, file_nodes in by_file.items():
         _atomic_write(path, write_kdl(file_nodes))
 
-    # Rebuild config.kdl in the original node order (include lines stay where
-    # the user put them rather than getting hoisted to the top).
     _LARGE = 10**9
     primary_items: list[tuple[int, KdlNode]] = []
     for inc_node, _ in include_slots:
@@ -565,8 +551,6 @@ def _val_to_kdl(v: Any) -> str:
 
 
 def _is_inline_node(node: KdlNode) -> bool:
-    # True if the node was originally written as a one-liner: `name { child; }`
-    # We detect this by checking that nothing inside the block has a newline.
     if not node.children:
         return False
     if "\n" in node.trailing_trivia:
@@ -625,8 +609,6 @@ def _write_node(node: KdlNode, indent: int = 0) -> str:
 
     if node.children:
         if _is_inline_node(node):
-            # Keep the original pre-brace spacing (e.g. `Mod+B      {`) so
-            # any column-aligned keybind blocks stay aligned.
             pre_brace = node.trailing_trivia if node.trailing_trivia else " "
             if not pre_brace[0].isspace():
                 pre_brace = " " + pre_brace
@@ -638,9 +620,6 @@ def _write_node(node: KdlNode, indent: int = 0) -> str:
             res += "{"
 
             tt = node.trailing_trivia
-            # trailing_trivia here is the space that was *before* the '{', not after.
-            # Re-emitting it after the brace created `cursor { ` (trailing space).
-            # Only emit if it has real content like a comment or newline.
             if tt and (not tt.isspace() or "\n" in tt):
                 if not tt[0].isspace() and not tt.startswith("\n"):
                     res += " "
@@ -657,9 +636,6 @@ def _write_node(node: KdlNode, indent: int = 0) -> str:
                     res += "\n"
                 res += child_str
 
-            # children_trailing_trivia is usually just indentation whitespace before '}'.
-            # We reconstruct that ourselves via pad, so only emit it when it has
-            # real content (e.g. a trailing comment).
             ctt = node.children_trailing_trivia
             if ctt and (not ctt.isspace() or "\n" in ctt):
                 lines = ctt.splitlines(keepends=True)
@@ -675,7 +651,6 @@ def _write_node(node: KdlNode, indent: int = 0) -> str:
             res += pad
             res += "}"
 
-        # Don't tack on a '\n' — the next node's leading_trivia starts with one.
         return res
 
     elif node.trailing_trivia:
@@ -718,8 +693,7 @@ def write_kdl(nodes: list[KdlNode]) -> str:
 
 def save_niri_config(nodes: list[KdlNode], path: Path | None = None) -> None:
     target = path or NIRI_CONFIG
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(write_kdl(nodes))
+    _atomic_write(target, write_kdl(nodes))
 
 
 # Config mutation helpers
@@ -733,12 +707,10 @@ def find_or_create(nodes: list[KdlNode], *path: str) -> KdlNode:
         node = next((n for n in reversed(current_list) if n.name == name), None)
         if node is None:
             node = KdlNode(name=name)
-            # give it a blank line so it doesn't get concatenated to
-            # whatever node came before it in the serialized output
             node.leading_trivia = "\n"
             current_list.append(node)
         current_list = node.children
-    return node  # type: ignore[return-value]
+    return node
 
 
 def set_child_arg(parent: KdlNode, child_name: str, value: Any) -> None:
@@ -751,7 +723,6 @@ def set_child_arg(parent: KdlNode, child_name: str, value: Any) -> None:
             child = node
         else:
             child = KdlNode(name=child_name)
-            # Ensure it formats nicely if created from scratch
             child.leading_trivia = "\n"
             parent.children.append(child)
     child.args = [value]
@@ -776,9 +747,11 @@ def set_node_flag(parent: KdlNode, flag_name: str, enabled: bool) -> None:
         cache = getattr(parent, "_removed_children", {})
         if flag_name in cache:
             idx, node = cache[flag_name]
+            if not node.args:
+                node.args = [True]
             parent.children.insert(min(idx, len(parent.children)), node)
         else:
-            new_node = KdlNode(name=flag_name)
+            new_node = KdlNode(name=flag_name, args=[True])
             new_node.leading_trivia = "\n"
             parent.children.insert(0, new_node)
     elif not enabled and existing is not None:

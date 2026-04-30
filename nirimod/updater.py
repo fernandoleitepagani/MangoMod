@@ -4,10 +4,9 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import threading
 import urllib.request
 import stat
-import threading
-from gi.repository import GLib
 
 API_URL = "https://api.github.com/repos/srinivasr/nirimod/commits/main"
 INSTALL_DIR = os.path.expanduser("~/.local/share/nirimod")
@@ -25,12 +24,12 @@ FALLBACK_TERMINALS = [
 
 
 def check_for_updates(callback):
-    # Runs in a background thread so the UI stays responsive.
-    # Calls callback(sha, message) if there's something new, or callback(None, None) otherwise.
+
     def _do_check():
         try:
+            from gi.repository import GLib
             if not os.path.isdir(os.path.join(INSTALL_DIR, ".git")):
-                # not a git install, nothing we can do
+
                 GLib.idle_add(callback, None, None)
                 return
 
@@ -88,7 +87,7 @@ def _build_terminal_command(terminal: str, script_path: str) -> list[str] | None
 
 
 def launch_updater_in_terminal():
-    # Write a tiny installer script to /tmp and open it in whatever terminal is around.
+
     script_content = """#!/usr/bin/env bash
 echo "Starting NiriMod update..."
 curl -sSL https://raw.githubusercontent.com/srinivasr/nirimod/main/install.sh | bash -s -- --install

@@ -5,9 +5,7 @@ from __future__ import annotations
 import json
 from typing import Callable
 
-# gi (PyGObject) is a system-level dependency and is imported lazily inside the
-# functions that require it so this module can be imported in unit test
-# environments where the system GTK libraries may not be present.
+
 
 
 # Internal: synchronous helper
@@ -56,7 +54,10 @@ def _run_async(
             ok, stdout_bytes, stderr_bytes = source.communicate_finish(result)
             stdout = stdout_bytes.get_data().decode("utf-8", errors="replace") if stdout_bytes else ""
             stderr = stderr_bytes.get_data().decode("utf-8", errors="replace") if stderr_bytes else ""
-            rc = 0 if source.get_exit_status() == 0 else 1
+            if not ok:
+                rc = 1
+            else:
+                rc = 0 if source.get_exit_status() == 0 else 1
         except GLib.Error as exc:
             stdout, stderr, rc = "", str(exc), 1
         callback(stdout, stderr, rc)

@@ -424,10 +424,14 @@ class OutputsPage(BasePage):
             (n for n in nodes if n.name == "output" and n.args and n.args[0] == name),
             None,
         )
-        if out_node is None:
+        is_new = out_node is None
+        if is_new:
             out_node = KdlNode(name="output", args=[name])
             nodes.append(out_node)
-        self._ensure_output_fields(out_node, name)
+        # Only populate default fields when first creating the node, so subsequent
+        # edits don't overwrite user-set values with stale live data from niri.
+        if is_new:
+            self._ensure_output_fields(out_node, name)
 
         # Ensure the specified order in nirimod.kdl output block
         order = {"mode": 0, "scale": 1, "transform": 2, "position": 3}

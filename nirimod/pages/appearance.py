@@ -199,7 +199,7 @@ class AppearancePage(BasePage):
         )
         blur_grp.add(border_bg_row)
 
-        passes_val = int(blur_node.child_arg("passes") if blur_node else 0)
+        passes_val = int(blur_node.child_arg("passes", 0) if blur_node else 0)
         passes_adj = Gtk.Adjustment(
             value=passes_val, lower=0, upper=10, step_increment=1
         )
@@ -218,7 +218,7 @@ class AppearancePage(BasePage):
         passes_row.connect("notify::value", _on_passes_changed)
         blur_grp.add(passes_row)
 
-        offset_val = float(blur_node.child_arg("offset") if blur_node else 2.0)
+        offset_val = float(blur_node.child_arg("offset", 2.0) if blur_node else 2.0)
         offset_adj = Gtk.Adjustment(
             value=offset_val, lower=0.0, upper=20.0, step_increment=0.1
         )
@@ -235,7 +235,7 @@ class AppearancePage(BasePage):
         offset_row.connect("notify::value", _on_offset_changed)
         blur_grp.add(offset_row)
 
-        noise_val = float(blur_node.child_arg("noise") if blur_node else 0.0)
+        noise_val = float(blur_node.child_arg("noise", 0.0) if blur_node else 0.0)
         noise_adj = Gtk.Adjustment(
             value=noise_val, lower=0.0, upper=1.0, step_increment=0.01
         )
@@ -252,7 +252,7 @@ class AppearancePage(BasePage):
         noise_row.connect("notify::value", _on_noise_changed)
         blur_grp.add(noise_row)
 
-        saturation_val = float(blur_node.child_arg("saturation") if blur_node else 1.0)
+        saturation_val = float(blur_node.child_arg("saturation", 1.0) if blur_node else 1.0)
         saturation_adj = Gtk.Adjustment(
             value=saturation_val, lower=0.0, upper=5.0, step_increment=0.1
         )
@@ -401,9 +401,7 @@ class AppearancePage(BasePage):
         self._commit("shadow color")
 
     def _set_blur(self, prop: str, value):
-        # If passes is being set to 0, remove the blur node entirely — it's
-        # a Niri 26.04+ feature and an empty/zero block causes a validation
-        # error on older versions.
+
         if prop == "passes" and int(value) == 0:
             blur_node = next((n for n in self._nodes if n.name == "blur"), None)
             if blur_node is not None:

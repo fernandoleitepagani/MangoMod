@@ -65,7 +65,7 @@ _STATIC_LABELS = {
     "altleft": "Alt", "altright": "Alt", "up": "↑", "down": "↓", "left": "←", "right": "→", "space": ""
 }
 
-# Keys to skip when building lookup (modifier-only keys don't bind in niri)
+
 _MODIFIER_KEY_IDS = {
     "shiftleft",
     "shiftright",
@@ -80,7 +80,7 @@ _MODIFIER_KEY_IDS = {
 }
 
 # Niri keysym → keyboard id normalisation table
-# (covers special names users put in config.kdl that differ from the id)
+
 _KEYSYM_ALIAS: dict[str, str] = {
     "return": "return",
     "enter": "return",
@@ -180,8 +180,7 @@ class KeyboardVisualizer(Gtk.Box):
         self._area.set_hexpand(True)
         self._area.set_draw_func(self._draw)
 
-        # Wrap in an AspectFrame so GTK always forces it to an exact 2.8:1 ratio
-        # regardless of available height, fixing layout jumps.
+
         self._aspect_frame = Gtk.AspectFrame(ratio=2.8, obey_child=False)
         self._aspect_frame.set_child(self._area)
         self.append(self._aspect_frame)
@@ -190,7 +189,7 @@ class KeyboardVisualizer(Gtk.Box):
         click.connect("released", self._on_click)
         self._area.add_controller(click)
 
-        # We no longer need _on_resize since AspectFrame handles the scaling
+
 
         # Action overlay panel
         self._panel = _ActionPanel(
@@ -219,8 +218,7 @@ class KeyboardVisualizer(Gtk.Box):
         self._layout_id = layout_id
         self._xkb.set_layout(layout_id)
         
-        # try to guess if we should use ISO or ANSI physical keys
-        # most european layouts use the big L-shaped enter key (ISO)
+
         base_layout = layout_id.split(":")[0].lower()
         iso_layouts = {'it', 'fr', 'de', 'es', 'pt', 'uk', 'ru', 'ch', 'be', 'no', 'se', 'fi', 'dk'}
         if base_layout in iso_layouts:
@@ -470,7 +468,7 @@ class KeyboardVisualizer(Gtk.Box):
             swatch = Gtk.Box()
             swatch.set_size_request(12, 12)
             swatch.add_css_class("nm-kb-swatch")
-            # Inline CSS per chip color — easiest without a CssProvider per widget
+
             attrs = Gtk.CssProvider()
             attrs.load_from_data(
                 f".nm-kb-swatch {{ background: {rgba_css}; border-radius: 3px; }}".encode()
@@ -525,7 +523,7 @@ class _ActionPanel(Gtk.Box):
 
         self.append(Gtk.Separator())
 
-        # Stable container — we rebuild the PreferencesGroup inside here each time
+
         self._grp_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._grp_container.set_margin_start(8)
         self._grp_container.set_margin_end(8)
