@@ -54,6 +54,21 @@ LAYER_BOOL_ACTION_LABELS = {
     SCREENCAST_BLOCK_KEY: "Block from Screencast",
 }
 
+FLOATING_POSITION_PRESETS = [
+    ("Top", "top"),
+    ("Bottom", "bottom"),
+    ("Left", "left"),
+    ("Right", "right"),
+]
+CUSTOM_FLOATING_POSITION_LABEL = "Custom"
+FLOATING_POSITION_LOCATION_LABELS = [
+    label for label, _ in FLOATING_POSITION_PRESETS
+] + [CUSTOM_FLOATING_POSITION_LABEL]
+FLOATING_POSITION_CUSTOM_FIELD_LABELS = ["X Offset (px)", "Y Offset (px)"]
+CUSTOM_FLOATING_POSITION_INDEX = len(FLOATING_POSITION_PRESETS)
+DEFAULT_FLOATING_POSITION_RELATIVE_TO = "top"
+CUSTOM_FLOATING_POSITION_RELATIVE_TO = "top-left"
+
 
 class WindowSizeControlConfig(NamedTuple):
     title: str
@@ -107,6 +122,45 @@ def _bool_action_node(key: str) -> KdlNode:
     if key == SCREENCAST_BLOCK_KEY:
         return KdlNode(SCREENCAST_BLOCK_KEY, args=["screencast"])
     return KdlNode(key, args=[True])
+
+
+def _floating_position_setting(rule: KdlNode | None) -> tuple[bool, int, int, str]:
+    if rule is None:
+        return (False, 0, 0, DEFAULT_FLOATING_POSITION_RELATIVE_TO)
+
+    node = rule.get_child("default-floating-position")
+    if node is None:
+        return (False, 0, 0, DEFAULT_FLOATING_POSITION_RELATIVE_TO)
+
+    x = int(node.props.get("x", 0))
+    y = int(node.props.get("y", 0))
+    relative_to = str(
+        node.props.get("relative-to", DEFAULT_FLOATING_POSITION_RELATIVE_TO)
+    )
+    return (True, x, y, relative_to)
+
+
+def _make_floating_position_node(
+    enabled: bool, x: int, y: int, relative_to: str
+) -> KdlNode | None:
+    if not enabled:
+        return None
+    relative_to = relative_to.strip()
+    if not relative_to:
+        relative_to = DEFAULT_FLOATING_POSITION_RELATIVE_TO
+    return KdlNode(
+        "default-floating-position",
+        props={"x": int(x), "y": int(y), "relative-to": relative_to},
+    )
+
+
+def _floating_position_location_index(x: int, y: int, relative_to: str) -> int:
+    if x != 0 or y != 0:
+        return CUSTOM_FLOATING_POSITION_INDEX
+    for index, (_, preset_relative_to) in enumerate(FLOATING_POSITION_PRESETS):
+        if relative_to == preset_relative_to:
+            return index
+    return CUSTOM_FLOATING_POSITION_INDEX
 
 
 def _legacy_size_arg_setting(value) -> tuple[str, float | int | None]:
@@ -339,6 +393,106 @@ class WindowRulesPage(BasePage):
         t.connect("button-clicked", lambda *_: self._win._do_undo())
         self._win._toast_overlay.add_toast(t)
 
+    def _add_floating_position_controls(
+        self, group: Adw.PreferencesGroup, rule: KdlNode | None
+    ) -> dict[str, Gtk.Widget | str]:
+        enabled, x, y, relative_to = _floating_position_setting(rule)
+
+        enabled_row = Adw.SwitchRow(
+            title="Default Floating Position",
+            subtitle="Set the initial position for matching floating windows",
+        )
+        enabled_row.set_active(enabled)
+        group.add(enabled_row)
+
+        location_model = Gtk.StringList.new(FLOATING_POSITION_LOCATION_LABELS)
+        location_row = Adw.ComboRow(title="Location", model=location_model)
+        location_row.set_selected(_floating_position_location_index(x, y, relative_to))
+        group.add(location_row)
+
+        x_adj = Gtk.Adjustment(
+            value=x,
+            lower=-7680,
+            upper=7680,
+            step_increment=10,
+            page_increment=100,
+        )
+        x_row = Adw.SpinRow(
+            title=FLOATING_POSITION_CUSTOM_FIELD_LABELS[0],
+            adjustment=x_adj,
+            digits=0,
+        )
+        group.add(x_row)
+
+        y_adj = Gtk.Adjustment(
+            value=y,
+            lower=-7680,
+            upper=7680,
+            step_increment=10,
+            page_increment=100,
+        )
+        y_row = Adw.SpinRow(
+            title=FLOATING_POSITION_CUSTOM_FIELD_LABELS[1],
+            adjustment=y_adj,
+            digits=0,
+        )
+        group.add(y_row)
+
+        def _update_visibility(*_):
+            active = enabled_row.get_active()
+            custom = location_row.get_selected() == CUSTOM_FLOATING_POSITION_INDEX
+            location_row.set_visible(active)
+            x_row.set_visible(active and custom)
+            y_row.set_visible(active and custom)
+
+        enabled_row.connect("notify::active", _update_visibility)
+        location_row.connect("notify::selected", _update_visibility)
+        _update_visibility()
+
+        custom_relative_to = (
+            relative_to
+            if location_row.get_selected() == CUSTOM_FLOATING_POSITION_INDEX
+            else CUSTOM_FLOATING_POSITION_RELATIVE_TO
+        )
+        return {
+            "enabled": enabled_row,
+            "location": location_row,
+            "x": x_row,
+            "y": y_row,
+            "custom_relative_to": custom_relative_to,
+        }
+
+    def _floating_position_node_from_controls(
+        self, controls: dict[str, Gtk.Widget | str]
+    ) -> KdlNode | None:
+        enabled_row = controls["enabled"]
+        enabled = (
+            enabled_row.get_active()
+            if isinstance(enabled_row, Adw.SwitchRow)
+            else False
+        )
+        location_row = controls["location"]
+        selected = (
+            location_row.get_selected()
+            if isinstance(location_row, Adw.ComboRow)
+            else CUSTOM_FLOATING_POSITION_INDEX
+        )
+        if selected < CUSTOM_FLOATING_POSITION_INDEX:
+            _, relative_to = FLOATING_POSITION_PRESETS[selected]
+            return _make_floating_position_node(enabled, 0, 0, relative_to)
+        else:
+            custom_relative_to = controls.get("custom_relative_to")
+            relative_to = (
+                custom_relative_to
+                if isinstance(custom_relative_to, str)
+                else CUSTOM_FLOATING_POSITION_RELATIVE_TO
+            )
+        x_row = controls["x"]
+        y_row = controls["y"]
+        x = int(x_row.get_value()) if isinstance(x_row, Adw.SpinRow) else 0
+        y = int(y_row.get_value()) if isinstance(y_row, Adw.SpinRow) else 0
+        return _make_floating_position_node(enabled, x, y, relative_to)
+
     def _size_mode_index(self, kind: str, value: float | int | None) -> int:
         if kind == "fixed":
             return FIXED_SIZE_INDEX
@@ -503,6 +657,10 @@ class WindowRulesPage(BasePage):
             layout_grp.add(sr)
             bool_rows[key] = sr
 
+        floating_position_controls = self._add_floating_position_controls(
+            layout_grp, rule
+        )
+
         prefs.add(layout_grp)
 
         # ── Visual effects ────────────────────────────────────────────────
@@ -618,6 +776,13 @@ class WindowRulesPage(BasePage):
                 cn = self._size_node_from_controls(key, controls)
                 if cn is not None:
                     new_rule.children.append(cn)
+
+            # floating position
+            position_node = self._floating_position_node_from_controls(
+                floating_position_controls
+            )
+            if position_node is not None:
+                new_rule.children.append(position_node)
 
             # bool actions
             for key, sr in bool_rows.items():
