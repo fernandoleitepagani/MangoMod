@@ -1,12 +1,17 @@
 """Keyboard visualizer widget — Cairo DrawingArea keyboard map.
 
-Ported from omer-biz/visu (Elm/WASM) into pure Python + Cairo.
-The layout mirrors visu's `keyboardLayout` list exactly (56-key ANSI QWERTY).
+Inspired from omer-biz/visu (Elm/WASM) into pure Python + Cairo.
 """
 
 from __future__ import annotations
 
 import math
+
+try:
+    import cairo
+    HAS_CAIRO = True
+except ImportError:
+    HAS_CAIRO = False
 
 import gi
 
@@ -125,27 +130,39 @@ def normalize_key_id(raw_key: str) -> str:
     return _KEYSYM_ALIAS.get(k, k)
 
 
-# Colour palette (matches NiriMod dark theme)
+# Colour palette — matches reference screenshot (muted for theme consistency)
 def _rgb(r: int, g: int, b: int, a: float = 1.0):
     return (r / 255, g / 255, b / 255, a)
 
 
-_COL_KEY_BG = _rgb(24, 24, 27)
-_COL_KEY_BORDER = _rgb(255, 255, 255, 0.06)
-_COL_KEY_FG = _rgb(161, 161, 170)
+# Unbound key
+_COL_KEY_BG       = _rgb(30, 30, 36)          # dark charcoal fill
+_COL_KEY_BORDER   = _rgb(255, 255, 255, 0.07) # barely visible edge
+_COL_KEY_FG       = _rgb(200, 200, 210)        # label colour
 
-_COL_BOUND_BG = _rgb(88, 28, 135, 0.45)
-_COL_BOUND_BORDER = _rgb(147, 51, 234, 0.7)
-_COL_BOUND_MOD = _rgb(192, 132, 252)
+# Bound key
+_COL_BOUND_BG     = _rgb(45, 30, 80)           # muted indigo fill
+_COL_BOUND_BORDER = _rgb(100, 60, 160, 1.0)    # soft purple border
+_COL_BOUND_GLOW   = _rgb(100, 60, 160, 0.20)   # subtle outer glow
+_COL_BOUND_MOD    = _rgb(160, 140, 200)         # muted MOD label tint
 
-_COL_SEL_BG = _rgb(126, 34, 206, 0.6)
-_COL_SEL_BORDER = _rgb(168, 85, 247, 1.0)
+# Selected key
+_COL_SEL_BG       = _rgb(70, 40, 120)
+_COL_SEL_BORDER   = _rgb(140, 80, 200, 1.0)
+_COL_SEL_GLOW     = _rgb(140, 80, 200, 0.30)
 
-_COL_SEARCH_BG = _rgb(192, 97, 203, 0.35)
-_COL_SEARCH_BORDER = _rgb(192, 97, 203, 1.0)
+# Search-match key
+_COL_SEARCH_BG     = _rgb(100, 50, 130)
+_COL_SEARCH_BORDER = _rgb(160, 80, 180, 1.0)
+_COL_SEARCH_GLOW   = _rgb(160, 80, 180, 0.25)
 
-_COL_FRAME_BG = _rgb(12, 12, 13)
-_COL_FRAME_BORDER = _rgb(255, 255, 255, 0.08)
+# Badge pill
+_COL_BADGE_BG   = _rgb(80, 40, 140)
+_COL_BADGE_FG   = _rgb(255, 255, 255)
+
+# Chassis
+_COL_FRAME_BG     = _rgb(10, 10, 12)
+_COL_FRAME_BORDER = _rgb(255, 255, 255, 0.07)
 
 
 class KeyboardVisualizer(Gtk.Box):
@@ -175,11 +192,22 @@ class KeyboardVisualizer(Gtk.Box):
         self._key_rects: list[tuple[str, float, float, float, float]] = []
         # (key_id, x, y, w, h) — populated on first draw
 
+        if not HAS_CAIRO:
+            err_lbl = Gtk.Label(
+                label="Cairo is not installed — the physical keyboard view is unavailable.\nInstall dev-python/pycairo and restart.",
+                justify=Gtk.Justification.CENTER,
+            )
+            err_lbl.add_css_class("dim-label")
+            err_lbl.set_vexpand(True)
+            self.append(err_lbl)
+            return
+
         # Drawing area
         self._area = Gtk.DrawingArea()
         self._area.set_hexpand(True)
         self._area.set_draw_func(self._draw)
-
+        self._area.set_content_width(560)
+        self._area.set_content_height(200)
 
         self._aspect_frame = Gtk.AspectFrame(ratio=2.8, obey_child=False)
         self._aspect_frame.set_child(self._area)
@@ -189,29 +217,28 @@ class KeyboardVisualizer(Gtk.Box):
         click.connect("released", self._on_click)
         self._area.add_controller(click)
 
+        if HAS_CAIRO:
+            self._panel = _ActionPanel(
+                on_edit=lambda b: self.emit("edit-binding", b),
+                on_add=lambda k: self.emit("add-binding", k),
+            )
+            self.append(self._panel)
 
-
-        # Action overlay panel
-        self._panel = _ActionPanel(
-            on_edit=lambda b: self.emit("edit-binding", b),
-            on_add=lambda k: self.emit("add-binding", k),
-        )
-        self.append(self._panel)
-
-        # Legend
-        self.append(self._build_legend())
+            # Legend
+            self.append(self._build_legend())
 
     # Public API
 
     def set_bindings(self, bindings: dict[str, list[dict]]) -> None:
         """Accept a key_id → [bind_dict] mapping and refresh."""
         self._bindings = bindings
-        self._area.queue_draw()
-        # Refresh panel if a key was already selected
-        if self._selected_id:
-            self._panel.update(
-                self._selected_id, self._bindings.get(self._selected_id, [])
-            )
+        if hasattr(self, "_area"):
+            self._area.queue_draw()
+            # Refresh panel if a key was already selected
+            if self._selected_id:
+                self._panel.update(
+                    self._selected_id, self._bindings.get(self._selected_id, [])
+                )
 
     def set_layout(self, layout_id: str) -> None:
         """Set the visualizer layout mapping (e.g. 'us', 'it')."""
@@ -232,16 +259,14 @@ class KeyboardVisualizer(Gtk.Box):
             if sym:
                 self._dynamic_keysym_to_kid[sym.lower()] = kid
             
-        self._area.queue_draw()
+        if hasattr(self, "_area"):
+            self._area.queue_draw()
 
     def set_search(self, query: str) -> None:
         self._search_q = query.strip().lower()
-        self._area.queue_draw()
+        if hasattr(self, "_area"):
+            self._area.queue_draw()
 
-    def clear_selection(self) -> None:
-        self._selected_id = None
-        self._panel.clear()
-        self._area.queue_draw()
 
     # Internal helpers
 
@@ -266,11 +291,13 @@ class KeyboardVisualizer(Gtk.Box):
         return False
 
     def _draw(self, area, cr, width: int, height: int):
+        if width <= 0 or height <= 0:
+            return
         self._key_rects = []
 
-        # Margins for the outer "chassis"
-        chassis_pad = 12
-        pad_x, pad_y = 20, 16  # padding inside the chassis
+        # Internal margins
+        pad_x, pad_y = 16, 12
+        chassis_r = 12.0
 
         inner_w = width - 2 * pad_x
         inner_h = height - 2 * pad_y
@@ -278,19 +305,18 @@ class KeyboardVisualizer(Gtk.Box):
         active_geom = KEYBOARD_GEOMETRIES.get(self._geometry_id) or KEYBOARD_GEOMETRIES["ANSI"]
         n_rows = len(active_geom)
         row_h = inner_h / n_rows
-        key_gap = max(4.0, row_h * 0.12)
-        radius = max(4.0, row_h * 0.18)
+        
+        key_gap = max(2.5, row_h * 0.07)
+        radius = max(4.0, row_h * 0.16)
+        total_units = max(sum(w for _, w in row) for row in active_geom)
 
-        # 1. Draw the Keyboard Chassis
+        #Keyboard chassis
+        self._rounded_rect(cr, 0, 0, width, height, chassis_r)
         cr.set_source_rgba(*_COL_FRAME_BG)
-        self._rounded_rect(cr, chassis_pad, chassis_pad, width - 2 * chassis_pad, height - 2 * chassis_pad, radius * 1.5)
         cr.fill_preserve()
         cr.set_source_rgba(*_COL_FRAME_BORDER)
-        cr.set_line_width(1.5)
+        cr.set_line_width(1.0)
         cr.stroke()
-
-        # Compute max row width from actual layout data (rows are all equal)
-        total_units = max(sum(w for _, w in row) for row in active_geom)
 
         for row_idx, row in enumerate(active_geom):
             y = float(pad_y + row_idx * row_h)
@@ -299,131 +325,120 @@ class KeyboardVisualizer(Gtk.Box):
             for kid, units in row:
                 key_w = (units / total_units) * inner_w
 
-                # Spacer key — advance x but draw nothing
                 if not kid:
                     x += key_w
                     continue
-                
-                # Fetch dynamic label
+
                 label = _STATIC_LABELS.get(kid)
                 if label is None:
                     keycode = _KID_TO_KEYCODE.get(kid)
                     if keycode:
                         label = self._xkb.get_label(keycode)
-                
                 if label is None:
                     label = kid.upper() if len(kid) <= 1 else kid.capitalize()
                 else:
                     label = label.upper() if len(label) == 1 else label
-                key_rect_x = x + key_gap / 2
-                key_rect_y = y + key_gap / 2
-                key_rect_w = key_w - key_gap
-                key_rect_h = row_h - key_gap
 
-                # Determine state
-                binds = self._bindings.get(kid, [])
-                is_bound = bool(binds)
-                is_sel = self._selected_id == kid
+                kx = x + key_gap / 2
+                ky = y + key_gap / 2
+                kw = key_w - key_gap
+                kh = row_h - key_gap
+
+                binds   = self._bindings.get(kid, [])
+                is_bound  = bool(binds)
+                is_sel    = self._selected_id == kid
                 is_search = is_bound and self._matches_search(binds)
 
-                # Choose colours
+                # Colours for this key state
                 if is_sel:
-                    bg, border = _COL_SEL_BG, _COL_SEL_BORDER
-                    lw = 2.0
+                    fill   = _COL_SEL_BG
+                    border = _COL_SEL_BORDER
+                    glow   = _COL_SEL_GLOW
                 elif is_search:
-                    bg, border = _COL_SEARCH_BG, _COL_SEARCH_BORDER
-                    lw = 1.8
+                    fill   = _COL_SEARCH_BG
+                    border = _COL_SEARCH_BORDER
+                    glow   = _COL_SEARCH_GLOW
                 elif is_bound:
-                    bg, border = _COL_BOUND_BG, _COL_BOUND_BORDER
-                    lw = 1.4
+                    fill   = _COL_BOUND_BG
+                    border = _COL_BOUND_BORDER
+                    glow   = _COL_BOUND_GLOW
                 else:
-                    bg, border = _COL_KEY_BG, _COL_KEY_BORDER
-                    lw = 1.0
+                    fill   = _COL_KEY_BG
+                    border = _COL_KEY_BORDER
+                    glow   = None
 
-                # Draw Key Shadow/Depth (solid color at bottom)
-                cr.set_source_rgba(0, 0, 0, 0.3)
-                self._rounded_rect(
-                    cr, key_rect_x, key_rect_y + 1, key_rect_w, key_rect_h, radius
-                )
-                cr.fill()
+                # Outer glow for bound/selected keys
+                if glow:
+                    for spread, alpha_scale in ((6, 0.15), (3, 0.25), (1, 0.35)):
+                        cr.set_source_rgba(glow[0], glow[1], glow[2], glow[3] * alpha_scale)
+                        self._rounded_rect(
+                            cr,
+                            kx - spread, ky - spread,
+                            kw + spread * 2, kh + spread * 2,
+                            radius + spread,
+                        )
+                        cr.fill()
 
-                # Draw Key Body
-                self._rounded_rect(
-                    cr, key_rect_x, key_rect_y, key_rect_w, key_rect_h, radius
-                )
-                cr.set_source_rgba(*bg)
+                # Key face fill
+                self._rounded_rect(cr, kx, ky, kw, kh, radius)
+                cr.set_source_rgba(*fill)
                 cr.fill_preserve()
+
+                # Key border
+                lw = 1.2 if (is_bound or is_sel) else 0.8
                 cr.set_source_rgba(*border)
                 cr.set_line_width(lw)
                 cr.stroke()
 
-                # Selected glow ring
-                if is_sel:
-                    cr.set_source_rgba(168 / 255, 85 / 255, 247 / 255, 0.15)
-                    cr.set_line_width(5.0)
-                    self._rounded_rect(
-                        cr,
-                        key_rect_x - 3,
-                        key_rect_y - 3,
-                        key_rect_w + 6,
-                        key_rect_h + 6,
-                        radius + 3,
-                    )
-                    cr.stroke()
-
-                # Modifier badge (top-left tiny text)
-                if is_bound and not is_sel:
+                #Modifier label(top-left)
+                if is_bound:
                     first_mod = self._first_modifier(binds)
                     if first_mod:
+                        mod_fs = max(4.5, kh * 0.14)
+                        cr.select_font_face("Sans", 0, 1)
+                        cr.set_font_size(mod_fs)
+                        mx = int(kx + 6)
+                        my = int(ky + mod_fs + 5)
                         cr.set_source_rgba(*_COL_BOUND_MOD)
-                        cr.select_font_face(
-                            "Inter",
-                            0,  # SLANT_NORMAL
-                            1,
-                        )  # WEIGHT_BOLD
-                        badge_fs = max(6.5, key_rect_h * 0.18)
-                        cr.set_font_size(badge_fs)
-                        cr.move_to(key_rect_x + 4, key_rect_y + badge_fs + 2)
-                        cr.show_text(first_mod[:4].upper())
+                        cr.move_to(mx, my)
+                        cr.show_text(first_mod[:3].upper())
 
-                fs = max(8.0, key_rect_h * 0.32)
+                # --- Key label (centred) ---
+                fs = max(7.0, kh * 0.26)
+                cr.select_font_face("Sans", 0, 1)
                 cr.set_font_size(fs)
-                cr.select_font_face("Inter", 0, 1)
-
-                if is_bound:
-                    cr.set_source_rgba(0.95, 0.95, 1, 1.0)
-                else:
-                    cr.set_source_rgba(*_COL_KEY_FG)
-
                 te = cr.text_extents(label)
-                tx = key_rect_x + (key_rect_w - te.width) / 2 - te.x_bearing
-                ty = key_rect_y + (key_rect_h + te.height) / 2 - te.height / 2
+                tx = int(kx + (kw - te.width) / 2 - te.x_bearing)
+                ty = int(ky + (kh + te.height) / 2 - te.height / 2)
+
+                # Drop shadow
+                cr.set_source_rgba(0, 0, 0, 0.5)
+                cr.move_to(tx, ty + 1)
+                cr.show_text(label)
+                cr.set_source_rgba(1.0, 1.0, 1.0, 0.9)
                 cr.move_to(tx, ty)
                 cr.show_text(label)
 
-                # Binding count badge (bottom-right)
+                # --- Count badge (bottom-right purple pill) ---
                 if len(binds) > 1:
                     badge_txt = str(len(binds))
-                    bfs = max(6.0, key_rect_h * 0.16)
+                    bfs = max(5.0, kh * 0.14)
+                    cr.select_font_face("Sans", 0, 1)
                     cr.set_font_size(bfs)
                     bte = cr.text_extents(badge_txt)
-                    bpad = 3.0
+                    bpad = 2.0
                     bw = bte.width + bpad * 2
-                    bh = bte.height + bpad * 2
-                    bx = key_rect_x + key_rect_w - bw - 4
-                    by = key_rect_y + key_rect_h - bh - 4
-                    # Badge background circle
-                    cr.set_source_rgba(*_COL_SEL_BORDER)
-                    self._rounded_rect(cr, bx, by, bw, bh, bh / 2)
+                    bh_pill = bte.height + bpad * 2
+                    bx = int(kx + kw - bw - 5)
+                    by = int(ky + kh - bh_pill - 5)
+                    cr.set_source_rgba(*_COL_BADGE_BG)
+                    self._rounded_rect(cr, bx, by, bw, bh_pill, bh_pill / 2)
                     cr.fill()
-                    cr.set_source_rgba(1, 1, 1)
-                    cr.move_to(bx + bpad - bte.x_bearing, by + bpad - bte.y_bearing)
+                    cr.set_source_rgba(*_COL_BADGE_FG)
+                    cr.move_to(int(bx + bpad - bte.x_bearing), int(by + bpad - bte.y_bearing))
                     cr.show_text(badge_txt)
 
-                # Store hit-test rect
-                self._key_rects.append(
-                    (kid, key_rect_x, key_rect_y, key_rect_w, key_rect_h)
-                )
+                self._key_rects.append((kid, kx, ky, kw, kh))
                 x += key_w
 
     @staticmethod
@@ -531,7 +546,6 @@ class _ActionPanel(Gtk.Box):
         self._grp_container.set_margin_bottom(8)
         self.append(self._grp_container)
 
-        # def clear(self):
         self.set_visible(False)
 
     def update(self, key_id: str, binds: list[dict]):
@@ -628,19 +642,3 @@ class _ActionPanel(Gtk.Box):
         self._grp_container.append(new_grp)
         self.set_visible(True)
 
-
-def _extract_modifiers(keysym: str) -> list[str]:
-    parts = keysym.split("+")
-    result = []
-    _labels = {
-        "mod": "Mod",
-        "super": "Super",
-        "ctrl": "Ctrl",
-        "control": "Ctrl",
-        "shift": "Shift",
-        "alt": "Alt",
-        "win": "Win",
-    }
-    for p in parts[:-1]:
-        result.append(_labels.get(p.lower(), p))
-    return result

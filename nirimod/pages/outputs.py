@@ -35,7 +35,7 @@ class OutputsPage(BasePage):
         super().__init__(window)
         self._outputs: list[dict] = []
         self._current_out: dict | None = None
-        self._detail_groups: list[Adw.PreferencesGroup] = []
+
         self._canvas: Gtk.DrawingArea | None = None
         self._drag_output: str | None = None
         self._drag_offset: tuple[float, float] = (0, 0)
@@ -74,7 +74,7 @@ class OutputsPage(BasePage):
         self._detail_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         content.append(self._detail_box)
 
-        self._widget = tb
+
         self.refresh()
         return tb
 
@@ -183,7 +183,7 @@ class OutputsPage(BasePage):
             h = pos.get("height", 1080) * scale
             if x <= sx <= x + w and y <= sy <= y + h:
                 self._drag_output = o["name"]
-                self._drag_start_pos = (pos.get("x", 0), pos.get("y", 0))
+
                 self._drag_offset = (sx - x, sy - y)
                 return
 
@@ -425,9 +425,12 @@ class OutputsPage(BasePage):
             None,
         )
         is_new = out_node is None
-        if is_new:
+        if out_node is None:
             out_node = KdlNode(name="output", args=[name])
             nodes.append(out_node)
+
+        assert out_node is not None
+
         # Only populate default fields when first creating the node, so subsequent
         # edits don't overwrite user-set values with stale live data from niri.
         if is_new:

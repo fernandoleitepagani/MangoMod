@@ -296,10 +296,10 @@ class BindingsPage(BasePage):
                     if kb:
                         xkb = kb.get_child("xkb")
                         if xkb:
-                            l = xkb.child_arg("layout")
+                            layout = xkb.child_arg("layout")
                             v = xkb.child_arg("variant")
-                            if l:
-                                return f"{l}:{v}" if v else l
+                            if layout:
+                                return f"{layout}:{v}" if v else layout
         except Exception:
             pass
         return None
@@ -355,7 +355,7 @@ class BindingsPage(BasePage):
         self._flowbox.set_homogeneous(True)
         content.append(self._flowbox)
 
-        self._list_content = content
+
         return scroll
 
     def _build_keyboard_tab(self) -> Gtk.Widget:
@@ -378,11 +378,13 @@ class BindingsPage(BasePage):
         outer.append(kb_search)
 
         # Search bar
-        self._kb_stats = Gtk.Label(label="") # kept for reference if needed, but we use header now
+        self._kb_stats = Gtk.Label(label="")
         self._kb_stats.set_visible(False)
 
-        # Keyboard visualizer
         self._viz = KeyboardVisualizer()
+        idx = self._layout_combo.get_selected()
+        if 0 <= idx < len(self._layouts):
+            self._viz.set_layout(self._layouts[idx][0])
         self._viz.connect("key-selected", self._on_kb_key_selected)
         self._viz.connect("edit-binding", self._on_kb_edit_binding)
         self._viz.connect("add-binding", self._on_kb_add_binding)
@@ -392,11 +394,7 @@ class BindingsPage(BasePage):
 
     # Tab switching
 
-    def _on_tab_changed(self, stack, _param):
-        child = stack.get_visible_child_name()
-        # Show add-button only on list tab
-        if hasattr(self, "_add_btn_in_header"):
-            self._add_btn_in_header.set_visible(child == "list")
+
 
     # Refresh / sync
 

@@ -54,12 +54,12 @@ class NiriModWindow(Adw.ApplicationWindow):
 
         self.app_state = AppState()
         self.app_state.load()
-        self._badges: dict[str, int] = {}
+
         self._current_page_id = ""
         self._pages: dict[str, Gtk.Widget] = {}
         self._sidebar_rows: dict[str, Gtk.ListBoxRow] = {}
         self._sidebar_listboxes: dict[str, Gtk.ListBox] = {}
-        self._badge_labels: dict[str, Gtk.Label] = {}
+
 
         self._load_css()
         self._build_ui()
@@ -112,7 +112,7 @@ class NiriModWindow(Adw.ApplicationWindow):
 
         # Header with app title and a menu button for profiles
         header = Adw.HeaderBar()
-        title_widget = Adw.WindowTitle(title="NiriMod", subtitle="Config Editor")
+        title_widget = Adw.WindowTitle(title="NiriMod")
         header.set_title_widget(title_widget)
 
         sidebar_box.append(header)
@@ -216,11 +216,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         text_lbl.set_hexpand(True)
         box.append(text_lbl)
 
-        badge = Gtk.Label(label="")
-        badge.add_css_class("nm-badge")
-        badge.set_visible(False)
-        box.append(badge)
-        self._badge_labels[page_id] = badge
+
 
         row.set_child(box)
         return row
@@ -621,7 +617,24 @@ class NiriModWindow(Adw.ApplicationWindow):
         self.mark_clean()
         self.notify_nodes_changed()
 
+    def _raw_config_textview_focused(self) -> bool:
+        """Return True if the raw-config text editor currently has keyboard focus."""
+        raw_page = self._pages.get("raw_config")
+        if raw_page is None:
+            return False
+        tv = getattr(raw_page, "_textview", None)
+        if tv is None:
+            return False
+        return tv.has_focus()
+
     def _do_undo(self):
+        if self._raw_config_textview_focused():
+            raw_page = self._pages.get("raw_config")
+            buf = raw_page._textview.get_buffer()  # type: ignore[union-attr]
+            if buf.get_can_undo():
+                buf.undo()
+            return
+
         entry = self.app_state.apply_undo()
         if entry is None:
             return
@@ -637,6 +650,13 @@ class NiriModWindow(Adw.ApplicationWindow):
         self.notify_nodes_changed()
 
     def _do_redo(self):
+        if self._raw_config_textview_focused():
+            raw_page = self._pages.get("raw_config")
+            buf = raw_page._textview.get_buffer()
+            if buf.get_can_redo():
+                buf.redo()
+            return
+
         entry = self.app_state.apply_redo()
         if entry is None:
             return
@@ -933,11 +953,3 @@ class NiriModWindow(Adw.ApplicationWindow):
         box.append(save_row)
         dialog.set_extra_child(box)
 
-    def set_badge(self, page_id: str, count: int):
-        lbl = self._badge_labels.get(page_id)
-        if lbl:
-            if count > 0:
-                lbl.set_label(str(count))
-                lbl.set_visible(True)
-            else:
-                lbl.set_visible(False)

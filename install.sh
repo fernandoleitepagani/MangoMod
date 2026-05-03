@@ -118,18 +118,27 @@ install_pkgs() {
     zypper) sudo zypper install -y "${pkgs[@]}" ;;
     apt)    sudo apt-get update -qq && sudo apt-get install -y "${pkgs[@]}" ;;
     emerge)
-      warn "Gentoo: can't auto-install packages, please do it yourself:"
-      for pkg in "${pkgs[@]}"; do
-        echo -e "    ${CYAN}sudo emerge $pkg${NC}"
-      done
-      if [[ " ${pkgs[*]} " =~ " dev-python/pygobject " ]]; then
-        echo -e "    ${YELLOW}Note: Ensure dev-python/pygobject is built with the 'cairo' USE flag!${NC}"
-      fi
       echo ""
-      if ask "Already installed them? Continue?" n; then
-        info "Continuing..."
+      echo -e "  ${YELLOW}⚠  Gentoo:${NC} packages compile from source and may take a few minutes."
+      echo -e "     The cairo USE flag will be set for dev-python/pygobject (needed for the keyboard view)."
+      echo ""
+      if ask "Proceed with emerge?" y; then
+        local use_file="/etc/portage/package.use/nirimod"
+        if ! grep -q "dev-python/pygobject" "$use_file" 2>/dev/null; then
+          echo "dev-python/pygobject cairo" | sudo tee -a "$use_file" > /dev/null
+        fi
+        sudo emerge --newuse --ask=n "${pkgs[@]}" || {
+          error "emerge failed. Try running manually:"
+          for pkg in "${pkgs[@]}"; do
+            echo -e "    ${CYAN}sudo emerge $pkg${NC}"
+          done
+          exit 1
+        }
       else
-        error "Install the packages above then re-run: bash install.sh --install --skip-deps"
+        warn "Install these manually then re-run: bash install.sh --install --skip-deps"
+        for pkg in "${pkgs[@]}"; do
+          echo -e "    ${CYAN}sudo emerge $pkg${NC}"
+        done
         exit 1
       fi
       ;;
@@ -144,7 +153,15 @@ pkg_installed() {
     dnf)    rpm -q "$pkg" &>/dev/null || rpm -q --whatprovides "$pkg" &>/dev/null ;;
     zypper) rpm -q "$pkg" &>/dev/null || rpm -q --whatprovides "$pkg" &>/dev/null ;;
     apt)    dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed" ;;
-    emerge) command -v qlist &>/dev/null && qlist -I "$pkg" &>/dev/null || return 1 ;;
+    emerge)
+      if command -v qlist &>/dev/null; then
+        qlist -I "$pkg" &>/dev/null
+      elif command -v equery &>/dev/null; then
+        equery -q list "$pkg" &>/dev/null
+      else
+        return 1
+      fi
+      ;;
   esac
 }
 
@@ -288,7 +305,14 @@ check_dependencies() {
         exit 1
       fi
     else
-      success "All system packages are already installed."
+      if [ "${PM:-}" = "emerge" ]; then
+        success "All system packages are already installed."
+        echo -e "  ${YELLOW}Note:${NC} If the keyboard view is blank, you may need to rebuild pygobject with the cairo USE flag:"
+        echo -e "  ${CYAN}echo 'dev-python/pygobject cairo' | sudo tee -a /etc/portage/package.use/nirimod && sudo emerge --newuse dev-python/pygobject dev-python/pycairo${NC}"
+        echo ""
+      else
+        success "All system packages are already installed."
+      fi
     fi
   fi
 

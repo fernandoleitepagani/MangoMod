@@ -140,7 +140,7 @@ class LayoutPage(BasePage):
                 if c.name == "proportion" and c.args:
                     presets.append(float(c.args[0]))
         self._preset_spins: list[Gtk.SpinButton] = []
-        self._pw_grp = pw_grp
+
         for val in presets or [0.333, 0.5, 0.667]:
             self._add_preset_row(pw_grp, val)
         add_preset_btn = Gtk.Button(label="Add Preset")

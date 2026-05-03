@@ -1,4 +1,4 @@
-"""Raw Config page — read-only view of the full merged config."""
+"""Raw Config page — editable view of the full merged config."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Pango
+from gi.repository import Gtk, Pango, GLib
 
 from pathlib import Path
 
 from nirimod import niri_ipc
-from nirimod.kdl_parser import NIRI_CONFIG, KdlNode
+from nirimod.kdl_parser import NIRI_CONFIG
 from nirimod.pages.base import BasePage
 
 
@@ -20,42 +20,52 @@ class RawConfigPage(BasePage):
     def build(self) -> Gtk.Widget:
         tb, header, _, content = self._make_toolbar_page("Raw Config")
         self._content = content
-        
-        # File selector (replaces the window title)
-        self._current_files: list[tuple[KdlNode, Path]] = []
+
+        self._scroll_positions: dict[Path, tuple[float, float]] = {}
+        self._buffer_modified = False
+        self._original_text = ""
+
+        self._current_files: list[Path] = []
         self._file_dropdown = Gtk.DropDown()
         self._file_dropdown.set_valign(Gtk.Align.CENTER)
         self._file_dropdown.connect("notify::selected-item", self._on_file_selected)
-        
-        # Wrap dropdown in a box to act as title widget
-        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         title_box.set_halign(Gtk.Align.CENTER)
-        
-        title_label = Gtk.Label(label="<b>File:</b>", use_markup=True)
+        title_box.set_valign(Gtk.Align.CENTER)
+
+        title_label = Gtk.Label(label="Config File")
+        title_label.add_css_class("title")
         title_box.append(title_label)
         title_box.append(self._file_dropdown)
-        
-        # File selector goes to pack_start
-        header.pack_start(title_box)
 
-        # Header Actions
+        header.pack_start(title_box)
+        title_box.set_margin_start(12)
+
+        # Header actions
         validate_btn = Gtk.Button(label="Validate")
         validate_btn.add_css_class("suggested-action")
         validate_btn.connect("clicked", self._on_validate)
         header.pack_end(validate_btn)
-        
 
-        copy_btn = Gtk.Button(icon_name="edit-copy-symbolic", tooltip_text="Copy")
-        copy_btn.connect("clicked", self._on_copy)
-        header.pack_end(copy_btn)
+        self._save_btn = Gtk.Button(label="Save")
+        self._save_btn.add_css_class("suggested-action")
+        self._save_btn.set_tooltip_text("Save this file and reload niri (Ctrl+S)")
+        self._save_btn.connect("clicked", self._on_save_raw)
+        self._save_btn.set_sensitive(False)
+        header.pack_end(self._save_btn)
 
-        refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Refresh")
-        refresh_btn.connect("clicked", lambda *_: self.refresh())
-        header.pack_end(refresh_btn)
+        self._discard_btn = Gtk.Button(label="Discard")
+        self._discard_btn.add_css_class("destructive-action")
+        self._discard_btn.add_css_class("flat")
+        self._discard_btn.set_tooltip_text("Discard unsaved changes")
+        self._discard_btn.connect("clicked", self._on_discard_raw)
+        self._discard_btn.set_sensitive(False)
+        header.pack_end(self._discard_btn)
 
-        # Code Editor View
+        # Editor
         self._textview = Gtk.TextView()
-        self._textview.set_editable(False)
+        self._textview.set_editable(True)
         self._textview.set_monospace(True)
         self._textview.set_wrap_mode(Gtk.WrapMode.NONE)
         self._textview.set_left_margin(16)
@@ -64,16 +74,60 @@ class RawConfigPage(BasePage):
         self._textview.set_bottom_margin(16)
         self._textview.add_css_class("code-editor")
 
-        scroll2 = Gtk.ScrolledWindow()
-        scroll2.add_css_class("card") # Make the editor look like a card
-        scroll2.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scroll2.set_vexpand(True)
-        scroll2.set_hexpand(True)
-        scroll2.set_child(self._textview)
-        content.append(scroll2)
+        self._buf = self._textview.get_buffer()
+        self._buf.connect("changed", self._on_buffer_changed)
+
+        self._scroll = Gtk.ScrolledWindow()
+        self._scroll.add_css_class("card")
+        self._scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        self._scroll.set_vexpand(True)
+        self._scroll.set_hexpand(True)
+        self._scroll.set_child(self._textview)
+        content.append(self._scroll)
 
         self.refresh()
         return tb
+
+    # ------------------------------------------------------------------
+    # Scroll position helpers
+    # ------------------------------------------------------------------
+
+    def _save_scroll_position(self):
+        """Persist the current scroll position for the active file."""
+        idx = self._file_dropdown.get_selected()
+        if idx == Gtk.INVALID_LIST_POSITION or idx >= len(self._current_files):
+            return
+        path = self._current_files[idx]
+        hadj = self._scroll.get_hadjustment()
+        vadj = self._scroll.get_vadjustment()
+        self._scroll_positions[path] = (hadj.get_value(), vadj.get_value())
+
+    def _restore_scroll_position(self, path: Path):
+        """Restore the saved scroll position for a given file, if any."""
+        if path not in self._scroll_positions:
+            return
+        hval, vval = self._scroll_positions[path]
+
+        def _apply():
+            hadj = self._scroll.get_hadjustment()
+            vadj = self._scroll.get_vadjustment()
+            hadj.set_value(hval)
+            vadj.set_value(vval)
+            return False  # don't repeat
+
+        # Defer one frame so the buffer is fully laid out before scrolling
+        GLib.idle_add(_apply)
+
+    # ------------------------------------------------------------------
+    # Page lifecycle
+    # ------------------------------------------------------------------
+
+    def on_shown(self):
+        """Called every time the user navigates back to this page."""
+        # Restore scroll for whichever file is currently selected
+        idx = self._file_dropdown.get_selected()
+        if idx != Gtk.INVALID_LIST_POSITION and idx < len(self._current_files):
+            self._restore_scroll_position(self._current_files[idx])
 
     def refresh(self):
         state = self._win.app_state
@@ -88,27 +142,141 @@ class RawConfigPage(BasePage):
 
         strings = [p.name for p in self._current_files]
         self._file_dropdown.set_model(Gtk.StringList.new(strings))
-        
+
         self._load_selected_file()
+
+    def _reload_from_disk(self):
+        """Re-read the file from disk, discarding any edits."""
+        self._load_selected_file(force=True)
+
+    # ------------------------------------------------------------------
+    # File loading
+    # ------------------------------------------------------------------
 
     def _on_file_selected(self, dropdown, param):
+        self._save_scroll_position()
         self._load_selected_file()
 
-    def _load_selected_file(self):
+    def _load_selected_file(self, force: bool = False):
+        idx = self._file_dropdown.get_selected()
+        if idx == Gtk.INVALID_LIST_POSITION or idx >= len(self._current_files):
+            return
+
+        if self._buffer_modified and not force:
+            self._confirm_discard_then(lambda: self._do_load_file(idx))
+            return
+
+        self._do_load_file(idx)
+
+    def _do_load_file(self, idx: int):
+        path = self._current_files[idx]
+        text = path.read_text() if path.exists() else f"// File not found: {path}"
+
+        self._buf.handler_block_by_func(self._on_buffer_changed)
+        self._buf.set_text(text)
+        self._original_text = text
+        self._apply_syntax_highlighting(self._buf, text)
+        self._buf.handler_unblock_by_func(self._on_buffer_changed)
+
+        self._set_modified(False)
+        self._restore_scroll_position(path)
+
+    # ------------------------------------------------------------------
+    # Buffer modification tracking
+    # ------------------------------------------------------------------
+
+    def _on_buffer_changed(self, buf):
+        text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+        is_changed = (text != self._original_text)
+        if is_changed != self._buffer_modified:
+            self._set_modified(is_changed)
+
+    def _set_modified(self, modified: bool):
+        self._buffer_modified = modified
+        self._save_btn.set_sensitive(modified)
+        self._discard_btn.set_sensitive(modified)
+
+    # ------------------------------------------------------------------
+    # Save / Discard
+    # ------------------------------------------------------------------
+
+    def _on_save_raw(self, *_):
         idx = self._file_dropdown.get_selected()
         if idx == Gtk.INVALID_LIST_POSITION or idx >= len(self._current_files):
             return
 
         path = self._current_files[idx]
-        text = path.read_text() if path.exists() else f"// File not found: {path}"
-        
-        buf = self._textview.get_buffer()
-        buf.set_text(text)
-        self._apply_syntax_highlighting(buf, text)
+        text = self._buf.get_text(self._buf.get_start_iter(), self._buf.get_end_iter(), False)
+
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        try:
+            tmp.write_text(text)
+        except Exception as e:
+            self.show_toast(f"Write error: {e}", timeout=6)
+            return
+
+        self.show_toast("Validating…", timeout=2)
+
+        def _on_validated(result):
+            ok, msg = result
+            if not ok:
+                tmp.unlink(missing_ok=True)
+                self.show_toast(f"Validation error: {msg[:120]}", timeout=8)
+                return
+            try:
+                tmp.replace(path)
+            except Exception as e:
+                self.show_toast(f"Save error: {e}", timeout=6)
+                return
+
+            self._set_modified(False)
+            self._original_text = text
+            self._apply_syntax_highlighting(self._buf, text)
+            niri_ipc.run_in_thread(niri_ipc.load_config_file, self._on_reloaded)
+
+        niri_ipc.run_in_thread(
+            lambda: niri_ipc.validate_config(str(tmp)), _on_validated
+        )
+
+    def _on_reloaded(self, result):
+        ok, msg = result
+        if ok:
+            self.show_toast("Config saved and applied ✓", timeout=3)
+        else:
+            self.show_toast(f"Saved, but reload failed: {msg[:80]}", timeout=8)
+        self._win.app_state.reload_from_disk()
+        self._win._build_search_index()
+
+    def _on_discard_raw(self, *_):
+        self._confirm_discard_then(self._reload_from_disk)
+
+    def _confirm_discard_then(self, callback):
+        import gi
+        gi.require_version("Adw", "1")
+        from gi.repository import Adw
+
+        dialog = Adw.AlertDialog(
+            heading="Discard changes?",
+            body="Your unsaved edits to this file will be lost.",
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("discard", "Discard")
+        dialog.set_response_appearance("discard", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+
+        def _on_response(dlg, response):
+            if response == "discard":
+                self._set_modified(False)
+                callback()
+
+        dialog.connect("response", _on_response)
+        dialog.present(self._win)
+
+    # ------------------------------------------------------------------
+    # Syntax highlighting
+    # ------------------------------------------------------------------
 
     def _apply_syntax_highlighting(self, buf: Gtk.TextBuffer, text: str):
-        """Simple KDL syntax highlighting using text tags."""
-        # Create tags if not already
         tag_table = buf.get_tag_table()
 
         def _get_or_create_tag(name, **props):
@@ -137,12 +305,11 @@ class RawConfigPage(BasePage):
         _apply(r"\b(true|false|null)\b", keyword_tag)
         _apply(r"^(\s*)([a-zA-Z][\w\-]*)", node_tag, group=2)
 
-    def _on_copy(self, *_):
-        buf = self._textview.get_buffer()
-        text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
-        cb = self._textview.get_clipboard()
-        cb.set(text)
-        self.show_toast("Config copied to clipboard", timeout=2)
+    # ------------------------------------------------------------------
+    # Copy / Validate
+    # ------------------------------------------------------------------
+
+
 
     def _on_validate(self, *_):
         self.show_toast("Validating...")

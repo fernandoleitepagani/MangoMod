@@ -10,5 +10,8 @@ __pycache__/
 *.kdl.tmp
 
 
+# Scratch / debug scripts
+/test_*.py
+
 # Nix
 result

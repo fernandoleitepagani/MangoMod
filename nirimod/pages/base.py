@@ -22,7 +22,6 @@ def make_toolbar_page(
 ) -> tuple[Adw.ToolbarView, Adw.HeaderBar, Gtk.ScrolledWindow, Gtk.Box]:
     tb = Adw.ToolbarView()
     header = Adw.HeaderBar()
-    header.set_title_widget(Adw.WindowTitle(title=title))
     tb.add_top_bar(header)
 
     # Hamburger menu on the content header (appears next to window close button)

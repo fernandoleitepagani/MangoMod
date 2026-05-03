@@ -243,12 +243,7 @@ class BezierEditor(Gtk.DrawingArea):
 
 
 def _fetch_presets_from_github(api_url, raw_tmpl, html_tmpl, cache_attr, callback):
-    """Generic preset fetcher for any GitHub contents API endpoint.
-
-    *cache_attr* is the name of the module-level cache variable as a string.
-    *callback* is called on the GLib main loop with list[dict] or Exception.
-    Each dict has: name, display_name, download_url, html_url.
-    """
+    """Generic preset fetcher for any GitHub contents API endpoint."""
     import sys
     mod = sys.modules[__name__]
     cached = getattr(mod, cache_attr)
@@ -369,8 +364,6 @@ class AnimationsPage(BasePage):
         self._active_preset_lbl.add_css_class("caption")
         title_vbox.append(self._active_preset_lbl)
         header_box.append(title_vbox)
-
-        # Switch to Custom option is now inside the Custom tab
 
 
         # View Switcher (Styled as Custom/Presets buttons)
@@ -605,7 +598,7 @@ class AnimationsPage(BasePage):
 
     def _list_local_presets(self) -> list[dict]:
         """Return all downloaded presets sorted by display name."""
-        entries = []
+        entries: list[dict] = []
         if not _LOCAL_PRESETS_DIR.exists():
             return entries
         for source_dir in sorted(_LOCAL_PRESETS_DIR.iterdir()):
@@ -798,17 +791,7 @@ class AnimationsPage(BasePage):
         rows_attr: str,
         source_label: str,
     ) -> Adw.PreferencesGroup:
-        """Generic builder for a community-preset PreferencesGroup.
-
-        Parameters
-        ----------
-        title:            Group title shown in the UI.
-        description:      Subtitle/description text.
-        fetch_fn:         Module-level function to call to fetch entries.
-        bust_cache_attr:  Name of the module-level cache variable to clear on refresh.
-        rows_attr:        Name of the instance attribute list that tracks added rows.
-        source_label:     Human-readable source name shown in the confirmation dialog.
-        """
+        """Generic builder for a community-preset PreferencesGroup."""
         import sys
         mod = sys.modules[__name__]
 
@@ -989,9 +972,6 @@ class AnimationsPage(BasePage):
 
         threading.Thread(target=_worker, daemon=True).start()
 
-    # keep old name as alias
-    def _make_nirimation_row(self, entry: dict) -> Adw.ActionRow:
-        return self._make_preset_row(entry, "XansiVA/nirimation")
 
     def _confirm_apply_preset(self, entry, row, source_label="community"):
         try:
@@ -1017,12 +997,8 @@ class AnimationsPage(BasePage):
             dialog.connect("response", _on_response)
             dialog.present(self._win)
         except AttributeError:
-            # Adw.AlertDialog not available (older libadwaita) — fall back to direct apply
             self._apply_nirimation_preset(entry, row)
 
-    # Keep old name as alias
-    def _confirm_apply_nirimation(self, entry: dict, row: Adw.ActionRow):
-        self._confirm_apply_preset(entry, row, "XansiVA/nirimation")
 
     def _apply_nirimation_preset(self, entry, row):
         row.set_sensitive(False)
