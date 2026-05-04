@@ -21,12 +21,12 @@ from gi.repository import Adw, GLib, GObject, Gtk
 
 from nirimod.xkb_helper import XkbHelper
 
-# Geometry data: (key_id, width_units)
-# Rows total 60 units each.
 KEYBOARD_GEOMETRIES: dict[str, list[list[tuple[str, int]]]] = {
     "ANSI": [
+        # Row 0 — function row
+        [("escape", 4), ("", 2), ("f1", 3), ("f2", 3), ("f3", 3), ("f4", 3), ("", 2), ("f5", 3), ("f6", 3), ("f7", 3), ("f8", 3), ("", 2), ("f9", 3), ("f10", 3), ("f11", 3), ("f12", 3), ("", 2), ("print", 4), ("insert", 4), ("delete", 4)],
         # Row 1 — number row
-        [("escape", 4), ("1", 4), ("2", 4), ("3", 4), ("4", 4), ("5", 4), ("6", 4), ("7", 4), ("8", 4), ("9", 4), ("0", 4), ("minus", 4), ("equal", 4), ("backspace", 8)],
+        [("grave", 4), ("1", 4), ("2", 4), ("3", 4), ("4", 4), ("5", 4), ("6", 4), ("7", 4), ("8", 4), ("9", 4), ("0", 4), ("minus", 4), ("equal", 4), ("backspace", 8)],
         # Row 2 — QWERTY
         [("tab", 6), ("q", 4), ("w", 4), ("e", 4), ("r", 4), ("t", 4), ("y", 4), ("u", 4), ("i", 4), ("o", 4), ("p", 4), ("bracketleft", 4), ("bracketright", 4), ("backslash", 6)],
         # Row 3 — home row
@@ -37,8 +37,10 @@ KEYBOARD_GEOMETRIES: dict[str, list[list[tuple[str, int]]]] = {
         [("ctrlleft", 6), ("superleft", 6), ("altleft", 6), ("space", 24), ("altright", 6), ("left", 4), ("down", 4), ("right", 4)],
     ],
     "ISO": [
+        # Row 0 — function row
+        [("escape", 4), ("", 2), ("f1", 3), ("f2", 3), ("f3", 3), ("f4", 3), ("", 2), ("f5", 3), ("f6", 3), ("f7", 3), ("f8", 3), ("", 2), ("f9", 3), ("f10", 3), ("f11", 3), ("f12", 3), ("", 2), ("print", 4), ("insert", 4), ("delete", 4)],
         # Row 1 — number row
-        [("escape", 4), ("grave", 4), ("1", 4), ("2", 4), ("3", 4), ("4", 4), ("5", 4), ("6", 4), ("7", 4), ("8", 4), ("9", 4), ("0", 4), ("minus", 4), ("equal", 4), ("backspace", 4)],
+        [("grave", 4), ("1", 4), ("2", 4), ("3", 4), ("4", 4), ("5", 4), ("6", 4), ("7", 4), ("8", 4), ("9", 4), ("0", 4), ("minus", 4), ("equal", 4), ("backspace", 8)],
         # Row 2 — QWERTY
         [("tab", 6), ("q", 4), ("w", 4), ("e", 4), ("r", 4), ("t", 4), ("y", 4), ("u", 4), ("i", 4), ("o", 4), ("p", 4), ("bracketleft", 4), ("bracketright", 4), ("return", 6)],
         # Row 3 — home row
@@ -51,8 +53,10 @@ KEYBOARD_GEOMETRIES: dict[str, list[list[tuple[str, int]]]] = {
 }
 
 _KID_TO_KEYCODE = {
-    # Row 1
-    "escape": 1, "grave": 41, "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "7": 8, "8": 9, "9": 10, "0": 11, "minus": 12, "equal": 13, "backspace": 14,
+    # Function row
+    "escape": 1, "f1": 59, "f2": 60, "f3": 61, "f4": 62, "f5": 63, "f6": 64, "f7": 65, "f8": 66, "f9": 67, "f10": 68, "f11": 87, "f12": 88, "print": 99, "insert": 110, "delete": 111,
+    # Number row
+    "grave": 41, "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "7": 8, "8": 9, "9": 10, "0": 11, "minus": 12, "equal": 13, "backspace": 14,
     # Row 2
     "tab": 15, "q": 16, "w": 17, "e": 18, "r": 19, "t": 20, "y": 21, "u": 22, "i": 23, "o": 24, "p": 25, "bracketleft": 26, "bracketright": 27, "backslash": 43,
     # Row 3
@@ -63,11 +67,14 @@ _KID_TO_KEYCODE = {
     "ctrlleft": 29, "superleft": 125, "altleft": 56, "space": 57, "altright": 100, "left": 105, "down": 108, "right": 106
 }
 
-# Static fallbacks for modifiers and special keys
 _STATIC_LABELS = {
     "escape": "Esc", "backspace": "Bksp", "tab": "Tab", "return": "Enter", "capslock": "Caps",
     "shiftleft": "Shift", "shiftright": "Shift", "ctrlleft": "Ctrl", "superleft": "Super",
-    "altleft": "Alt", "altright": "Alt", "up": "↑", "down": "↓", "left": "←", "right": "→", "space": ""
+    "altleft": "Alt", "altright": "Alt", "up": "↑", "down": "↓", "left": "←", "right": "→", "space": "",
+    "grave": "`",
+    "f1": "F1", "f2": "F2", "f3": "F3", "f4": "F4", "f5": "F5", "f6": "F6",
+    "f7": "F7", "f8": "F8", "f9": "F9", "f10": "F10", "f11": "F11", "f12": "F12",
+    "print": "PrtSc", "insert": "Ins", "delete": "Del",
 }
 
 
@@ -83,8 +90,6 @@ _MODIFIER_KEY_IDS = {
     "backspace",
     "space",
 }
-
-# Niri keysym → keyboard id normalisation table
 
 _KEYSYM_ALIAS: dict[str, str] = {
     "return": "return",
@@ -116,8 +121,14 @@ _KEYSYM_ALIAS: dict[str, str] = {
     "home": "home",
     "end": "end",
     "print": "print",
+    "sysrq": "print",
     "delete": "delete",
+    "del": "delete",
     "insert": "insert",
+    "ins": "insert",
+    "f1": "f1", "f2": "f2", "f3": "f3", "f4": "f4",
+    "f5": "f5", "f6": "f6", "f7": "f7", "f8": "f8",
+    "f9": "f9", "f10": "f10", "f11": "f11", "f12": "f12",
 }
 
 for _c in "abcdefghijklmnopqrstuvwxyz0123456789":
@@ -130,7 +141,6 @@ def normalize_key_id(raw_key: str) -> str:
     return _KEYSYM_ALIAS.get(k, k)
 
 
-# Colour palette — matches reference screenshot (muted for theme consistency)
 def _rgb(r: int, g: int, b: int, a: float = 1.0):
     return (r / 255, g / 255, b / 255, a)
 
@@ -188,9 +198,7 @@ class KeyboardVisualizer(Gtk.Box):
         self._xkb = XkbHelper()
         self._xkb.set_layout(self._layout_id)
 
-        # Precompute flat list for hit-tests
         self._key_rects: list[tuple[str, float, float, float, float]] = []
-        # (key_id, x, y, w, h) — populated on first draw
 
         if not HAS_CAIRO:
             err_lbl = Gtk.Label(
@@ -207,9 +215,9 @@ class KeyboardVisualizer(Gtk.Box):
         self._area.set_hexpand(True)
         self._area.set_draw_func(self._draw)
         self._area.set_content_width(560)
-        self._area.set_content_height(200)
+        self._area.set_content_height(230)
 
-        self._aspect_frame = Gtk.AspectFrame(ratio=2.8, obey_child=False)
+        self._aspect_frame = Gtk.AspectFrame(ratio=2.4, obey_child=False)
         self._aspect_frame.set_child(self._area)
         self.append(self._aspect_frame)
 
@@ -234,7 +242,6 @@ class KeyboardVisualizer(Gtk.Box):
         self._bindings = bindings
         if hasattr(self, "_area"):
             self._area.queue_draw()
-            # Refresh panel if a key was already selected
             if self._selected_id:
                 self._panel.update(
                     self._selected_id, self._bindings.get(self._selected_id, [])
@@ -304,13 +311,17 @@ class KeyboardVisualizer(Gtk.Box):
 
         active_geom = KEYBOARD_GEOMETRIES.get(self._geometry_id) or KEYBOARD_GEOMETRIES["ANSI"]
         n_rows = len(active_geom)
-        row_h = inner_h / n_rows
         
+        frow_ratio = 0.7
+        frow_gap = max(3.0, inner_h * 0.015)
+        row_h = (inner_h - frow_gap) / (frow_ratio + n_rows - 1)
+        frow_h = frow_ratio * row_h
+
         key_gap = max(2.5, row_h * 0.07)
         radius = max(4.0, row_h * 0.16)
         total_units = max(sum(w for _, w in row) for row in active_geom)
 
-        #Keyboard chassis
+        # Keyboard chassis
         self._rounded_rect(cr, 0, 0, width, height, chassis_r)
         cr.set_source_rgba(*_COL_FRAME_BG)
         cr.fill_preserve()
@@ -319,7 +330,12 @@ class KeyboardVisualizer(Gtk.Box):
         cr.stroke()
 
         for row_idx, row in enumerate(active_geom):
-            y = float(pad_y + row_idx * row_h)
+            if row_idx == 0:
+                y = float(pad_y)
+                this_row_h = frow_h
+            else:
+                y = float(pad_y + frow_h + frow_gap + (row_idx - 1) * row_h)
+                this_row_h = row_h
             x = float(pad_x)
 
             for kid, units in row:
@@ -342,14 +358,13 @@ class KeyboardVisualizer(Gtk.Box):
                 kx = x + key_gap / 2
                 ky = y + key_gap / 2
                 kw = key_w - key_gap
-                kh = row_h - key_gap
+                kh = this_row_h - key_gap
 
                 binds   = self._bindings.get(kid, [])
                 is_bound  = bool(binds)
                 is_sel    = self._selected_id == kid
                 is_search = is_bound and self._matches_search(binds)
 
-                # Colours for this key state
                 if is_sel:
                     fill   = _COL_SEL_BG
                     border = _COL_SEL_BORDER
@@ -367,7 +382,6 @@ class KeyboardVisualizer(Gtk.Box):
                     border = _COL_KEY_BORDER
                     glow   = None
 
-                # Outer glow for bound/selected keys
                 if glow:
                     for spread, alpha_scale in ((6, 0.15), (3, 0.25), (1, 0.35)):
                         cr.set_source_rgba(glow[0], glow[1], glow[2], glow[3] * alpha_scale)
@@ -390,7 +404,6 @@ class KeyboardVisualizer(Gtk.Box):
                 cr.set_line_width(lw)
                 cr.stroke()
 
-                #Modifier label(top-left)
                 if is_bound:
                     first_mod = self._first_modifier(binds)
                     if first_mod:
@@ -403,7 +416,6 @@ class KeyboardVisualizer(Gtk.Box):
                         cr.move_to(mx, my)
                         cr.show_text(first_mod[:3].upper())
 
-                # --- Key label (centred) ---
                 fs = max(7.0, kh * 0.26)
                 cr.select_font_face("Sans", 0, 1)
                 cr.set_font_size(fs)
@@ -419,7 +431,6 @@ class KeyboardVisualizer(Gtk.Box):
                 cr.move_to(tx, ty)
                 cr.show_text(label)
 
-                # --- Count badge (bottom-right purple pill) ---
                 if len(binds) > 1:
                     badge_txt = str(len(binds))
                     bfs = max(5.0, kh * 0.14)
@@ -549,7 +560,6 @@ class _ActionPanel(Gtk.Box):
         self.set_visible(False)
 
     def update(self, key_id: str, binds: list[dict]):
-        # Clear previous group from the container
         while True:
             c = self._grp_container.get_first_child()
             if c is None:
@@ -585,7 +595,6 @@ class _ActionPanel(Gtk.Box):
 
                 row = Adw.ActionRow(title=GLib.markup_escape_text(full_action))
 
-                # Keycap Prefix
                 keys_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
                 keys_box.set_valign(Gtk.Align.CENTER)
                 keys_box.set_margin_start(4)
@@ -621,14 +630,12 @@ class _ActionPanel(Gtk.Box):
 
                 row.add_prefix(keys_box)
 
-                # Lock badge
                 if b.get("allow_when_locked"):
                     lock = Gtk.Label(label="🔒")
                     lock.set_tooltip_text("Allowed when screen is locked")
                     lock.set_valign(Gtk.Align.CENTER)
                     row.add_suffix(lock)
                     
-                # Edit Button
                 edit_btn = Gtk.Button(icon_name="document-edit-symbolic")
                 edit_btn.add_css_class("flat")
                 edit_btn.add_css_class("circular")

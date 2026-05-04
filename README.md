@@ -86,7 +86,7 @@ Works on Arch, Fedora, openSUSE, and Debian/Ubuntu out of the box. For other dis
 
 **Gentoo** (requires the [GURU overlay](https://wiki.gentoo.org/wiki/Project:GURU) for `niri`):
 ```bash
-emerge dev-vcs/git net-misc/curl dev-lang/python gui-libs/gtk gui-libs/libadwaita dev-python/pygobject
+emerge dev-vcs/git net-misc/curl dev-lang/python gui-libs/gtk gui-libs/libadwaita dev-python/pygobject dev-python/pycairo x11-libs/libxkbcommon x11-misc/xkeyboard-config
 curl -sSL https://raw.githubusercontent.com/srinivasr/nirimod/main/install.sh | bash -s -- --install --skip-deps
 ```
 
@@ -94,7 +94,7 @@ curl -sSL https://raw.githubusercontent.com/srinivasr/nirimod/main/install.sh | 
 | :--- | :--- |
 | Python 3.12+ | Runtime |
 | GTK4 + libadwaita | UI toolkit |
-| PyGObject | Python ↔ GTK bindings |
+| PyGObject & Pycairo | Python ↔ GTK bindings |
 | [uv](https://github.com/astral-sh/uv) | Env manager — the installer handles this |
 | niri | The compositor you're configuring |
 

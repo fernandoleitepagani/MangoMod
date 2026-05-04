@@ -167,10 +167,6 @@ pkg_installed() {
 
 cmd_exists() { command -v "$1" &>/dev/null; }
 
-# Dependency Resolution
-#
-# Maintains a list of missing packages for the current distro.
-#
 resolve_deps() {
   MISSING=()
 
@@ -213,7 +209,6 @@ resolve_deps() {
     dnf)
       pkg_installed gtk4           || MISSING+=("gtk4") ;;
     zypper)
-      # libgtk-4-1 is the real package name; gtk4 is the capability it provides
       pkg_installed libgtk-4-1     || MISSING+=("libgtk-4-1") ;;
     apt)
       pkg_installed libgtk-4-1     || MISSING+=("libgtk-4-1") ;;
@@ -228,7 +223,6 @@ resolve_deps() {
     dnf)
       pkg_installed libadwaita           || MISSING+=("libadwaita") ;;
     zypper)
-      # libadwaita-1-0 is the real package; typelib is pulled in automatically
       pkg_installed libadwaita-1-0       || MISSING+=("libadwaita-1-0") ;;
     apt)
       pkg_installed libadwaita-1-0       || MISSING+=("libadwaita-1-0") ;;
@@ -245,14 +239,15 @@ resolve_deps() {
       pkg_installed python3-gobject-base || \
         MISSING+=("python3-gobject") ;;
     zypper)
-      # Use --whatprovides so python313-gobject etc. are found via the python3-gobject capability
       pkg_installed python3-gobject || MISSING+=("python3-gobject") ;;
     apt)
-      pkg_installed python3-gi || MISSING+=("python3-gi" "python3-gi-cairo") ;;
+      pkg_installed python3-gi       || MISSING+=("python3-gi")
+      pkg_installed python3-gi-cairo || MISSING+=("python3-gi-cairo")
+      ;;
     emerge)
       pkg_installed dev-python/pygobject || MISSING+=("dev-python/pygobject")
       pkg_installed dev-python/pycairo || MISSING+=("dev-python/pycairo")
-      pkg_installed dev-libs/libxkbcommon || MISSING+=("dev-libs/libxkbcommon")
+      pkg_installed x11-libs/libxkbcommon || MISSING+=("x11-libs/libxkbcommon")
       pkg_installed x11-misc/xkeyboard-config || MISSING+=("x11-misc/xkeyboard-config")
       ;;
   esac
@@ -374,8 +369,6 @@ install_app() {
   step "Setting Up Python Environment"
   cd "$INSTALL_DIR"
 
-  # PyGObject is a system package; the venv MUST see it via system site-packages.
-  # We force use of the host 'python3' to ensure compatibility with system gi bindings.
   info "Creating virtual environment with system site-packages..."
   rm -rf .venv # Ensure clean state
   uv venv --system-site-packages --python python3
