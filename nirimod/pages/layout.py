@@ -204,10 +204,23 @@ class LayoutPage(BasePage):
         if pcw is None:
             pcw = KdlNode("preset-column-widths")
             layout.children.append(pcw)
-        pcw.children = [
-            KdlNode("proportion", args=[round(s.get_value(), 5)])
-            for s in self._preset_spins
-        ]
+        new_children = []
+        for i, s in enumerate(self._preset_spins):
+            if i < len(pcw.children):
+                child = pcw.children[i]
+                child.name = "proportion"
+                child.args = [round(s.get_value(), 5)]
+                new_children.append(child)
+            else:
+                new_children.append(KdlNode("proportion", args=[round(s.get_value(), 5)]))
+                
+        salvaged = ""
+        for i in range(len(self._preset_spins), len(pcw.children)):
+            salvaged += pcw.children[i].leading_trivia
+        if salvaged and new_children:
+            new_children[-1].trailing_trivia += salvaged
+            
+        pcw.children = new_children
         self._commit("preset column widths")
 
     def _set_layout(self, key: str, value):

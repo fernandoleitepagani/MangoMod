@@ -822,6 +822,7 @@ class WindowRulesPage(BasePage):
             if rule_idx >= 0 and 0 <= rule_idx < len(rules):
                 i = self._nodes.index(rules[rule_idx])
                 new_rule.source_file = rules[rule_idx].source_file
+                new_rule.leading_trivia = rules[rule_idx].leading_trivia
                 self._nodes[i] = new_rule
             else:
                 if rules:
@@ -996,6 +997,7 @@ class WindowRulesPage(BasePage):
             if idx >= 0 and 0 <= idx < len(rules):
                 i = self._nodes.index(rules[idx])
                 new_rule.source_file = rules[idx].source_file
+                new_rule.leading_trivia = rules[idx].leading_trivia
                 self._nodes[i] = new_rule
             else:
                 if rules:

@@ -17,13 +17,20 @@ Niri's config is a KDL file, and editing it by hand works fine — until it does
 
 ---
 
-## What it looks like
+## Features
 
-### Outputs & Animations
+### Outputs
 
-The left side handles display config — scaling, resolution, the usual. The right side is an animation editor where you can actually see the easing curve instead of guessing cubic-bezier values and reloading twenty times.
+Live display configuration pulled straight from niri via IPC. Every connected monitor shows up with its real name, current resolution, refresh rate, and scale. You can:
 
-*(That's the screenshot above.)*
+- Pick resolution and refresh rate from the actual mode list niri reports
+- Set fractional scale (0.25× to 4.0×)
+- Apply output transforms (90°, 180°, 270°, flipped variants)
+- Set position with X/Y spinners or by **drag-and-dropping monitors** on the canvas
+- Toggle Variable Refresh Rate (VRR) per output
+- Disable an output entirely
+
+The canvas keeps a stable scale while dragging and snaps to monitor edges for clean tiling. Positions are written back to config as integers, but fractional pixel boundaries from scaling are handled correctly to avoid niri rejecting the layout.
 
 ---
 
@@ -31,36 +38,95 @@ The left side handles display config — scaling, resolution, the usual. The rig
 
 ![Keybinding Management](media/2.png)
 
-Two views: a physical keyboard map that shows you which keys are bound (so you stop clobbering your own shortcuts), and a searchable list for when you just want to find and change something quickly.
+Two views in one page:
+
+**Physical keyboard map** — a Cairo-rendered keyboard that lights up bound keys in purple. Modifier keys show a small label when they're part of a binding. Keys with more than one binding get a badge with the count. Click any key to open a panel where you can edit or add bindings for it.
+
+**List view** — a searchable, filterable table of every binding. Add, edit, and remove entries without hunting through the keyboard. The search box filters across both action names and key combos in real time.
 
 ---
 
-### Multi-file configs
+### Animations
 
-![Multi-File Configurations](media/multiple_configs.png)
-
-If you split your niri config across multiple files with `include` directives, NiriMod handles that. It parses all the included files together and writes changes back to the correct file. You don't need to flatten your config to use this.
+An animation editor where you actually see the easing curve instead of guessing cubic-bezier values and reloading twenty times. Drag the control points on the curve preview, adjust duration, and see the result immediately. Supports all of niri's animation slots (window open/close, workspace switch, etc.).
 
 ---
 
-## Demo
+### Layout
 
-https://github.com/user-attachments/assets/demo.mp4
+Controls the niri column layout: default column widths, preset proportions, gaps, struts, and border settings. Preset proportions are editable as a list of spinners and written back in the correct `proportion` child-node format.
 
-> *If the video doesn't load, grab [`demo.mp4`](media/demo.mp4) directly.*
+---
+
+### Window Rules
+
+A full editor for niri's `window-rules` block. Rules can be added, removed, and reordered. Each rule supports all match criteria (app-id, title, workspace, etc.) and all rule actions. Leading comments attached to each rule are preserved across edits — removing a rule doesn't silently drop the comment that was above it.
+
+---
+
+### Input
+
+Mouse, touchpad, and keyboard settings in one place — sensitivity, natural scrolling, tap-to-click, accel profiles, key repeat, and XKB options.
+
+---
+
+### Appearance
+
+Cursor theme and size, GTK dark/light preference, and other compositor-level appearance settings.
+
+---
+
+### Gestures
+
+Touchpad gesture configuration: swipe workspace switching, pinch-to-overview, and related options.
+
+---
+
+### Environment
+
+Manage `environment` key-value pairs that niri exports to every launched application. Add and remove entries directly.
+
+---
+
+### Startup
+
+The `spawn-at-startup` list. Add commands that niri runs on startup, remove ones you no longer need.
+
+---
+
+### Workspaces
+
+Named workspace configuration — add, rename, and remove workspaces.
+
+---
+
+### Raw Config Editor
+
+A built-in KDL text editor for when you want to go manual. Has undo/redo, preserved scroll position across saves, and writes back through the same validation pipeline as the GUI controls — so `niri validate` still runs before anything touches disk.
 
 ---
 
 ## How it stays safe
 
-NiriMod won't write a broken config to disk. Every save runs through `niri validate` first — if it doesn't pass, nothing gets written.
+**Validation before every write.** NiriMod runs `niri validate` on the output before writing anything to disk. If validation fails, nothing is saved and you get the error message.
 
-Beyond that:
+**Atomic writes.** Config files are written to a temp file in the same directory and then renamed into place — no partial writes, no corruption on interrupted saves.
 
-- **Undo/Redo** — `Ctrl+Z` / `Ctrl+Shift+Z`, unlimited history
-- **Config preservation** — NiriMod only touches settings it manages. Your startup commands, scripts, and anything it doesn't understand are left alone.
-- **Profiles** — save named config snapshots ("deep work", "gaming", etc.) and switch between them
-- **Raw mode** — built-in KDL editor with syntax highlighting for when you want to go manual
+**Comment and whitespace preservation.** The KDL parser stores each node's leading trivia (comments, blank lines) as part of the parse tree. When NiriMod writes the config back, those comments come with it. You won't lose your `// gaming profile` annotation or the blank lines you use to visually group things.
+
+**Selective editing.** NiriMod only rewrites nodes it manages. Anything it doesn't know about — startup scripts, custom environment vars it hasn't touched, raw nested config — is left exactly as-is.
+
+**Undo/Redo.** `Ctrl+Z` / `Ctrl+Shift+Z`. Up to 100 steps. Works across all pages including the raw editor.
+
+**Profiles.** Save named snapshots of your full config (`~/.config/niri/profiles/`). Works with multi-file configs — the entire file set is snapshotted and restored together. Switch between profiles (e.g. "work", "gaming", "presentation") in one click.
+
+---
+
+## Multi-file configs
+
+![Multi-File Configurations](media/multiple_configs.png)
+
+If you split your niri config with `include` directives, NiriMod handles that. It resolves includes recursively (up to 5 levels), parses all files together into a single flat node list, and tracks which node came from which file. When saving, each node is written back to the file it was loaded from. You don't need to flatten your config.
 
 ---
 
@@ -69,8 +135,6 @@ Beyond that:
 ```bash
 curl -sSL https://raw.githubusercontent.com/srinivasr/nirimod/main/install.sh | bash
 ```
-
-This runs an interactive installer that handles dependencies for you.
 
 | Flag | What it does |
 | :--- | :--- |
@@ -82,7 +146,7 @@ This runs an interactive installer that handles dependencies for you.
 
 ## Requirements
 
-Works on Arch, Fedora, openSUSE, and Debian/Ubuntu out of the box. For other distros like Gentoo, use the `--skip-deps` flag and install the following packages manually:
+Works on Arch, Fedora, openSUSE, and Debian/Ubuntu out of the box. For Gentoo, use `--skip-deps` and install the packages manually:
 
 **Gentoo** (requires the [GURU overlay](https://wiki.gentoo.org/wiki/Project:GURU) for `niri`):
 ```bash

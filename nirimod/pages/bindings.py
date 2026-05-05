@@ -90,11 +90,12 @@ _KNOWN_BIND_PROPS = {"allow-when-locked", "repeat"}
 
 def _make_bind(
     keysym: str,
-    action: str,
+    action: str = "",
     action_args: list | None = None,
     allow_when_locked: bool = False,
     repeat: bool = True,
     extra_props: dict | None = None,
+    node: KdlNode | None = None,
 ) -> dict:
     return {
         "keysym": keysym,
@@ -103,6 +104,7 @@ def _make_bind(
         "allow_when_locked": allow_when_locked,
         "repeat": repeat,
         "extra_props": extra_props or {},
+        "_node": node,
     }
 
 
@@ -129,35 +131,69 @@ def _parse_binds_from_nodes(nodes: list[KdlNode]) -> list[dict]:
                 keysym,
                 action,
                 action_args,
-                bool(allow_locked),
-                bool(repeat),
+                allow_locked,
+                repeat,
                 extra_props,
+                node=child,
             )
         )
     return result
 
 
 def _write_binds_to_node(binds_list: list[dict], binds_node: KdlNode):
-    """Rewrite the binds block's children from a list of bind dicts."""
-    binds_node.children.clear()
-    for b in binds_list:
-        child = KdlNode(name=b["keysym"])
+    kept_nodes = {id(b.get("_node")) for b in binds_list if b.get("_node") is not None}
+    salvaged_trivia = ""
+    for orig_child in binds_node.children:
+        if id(orig_child) not in kept_nodes:
+            salvaged_trivia += orig_child.leading_trivia
+            
+    new_children = []
+    for i, b in enumerate(binds_list):
+        child = b.get("_node")
+        if child is None:
+            child = KdlNode(name=b["keysym"])
+            child.leading_trivia = "\n    "
+        else:
+            child.name = b["keysym"]
+            
+        if i == 0 and salvaged_trivia:
+            child.leading_trivia = salvaged_trivia + child.leading_trivia
+            salvaged_trivia = ""
+            
+        child.props.clear()
         if b["allow_when_locked"]:
             child.props["allow-when-locked"] = True
         if not b["repeat"]:
             child.props["repeat"] = False
         for k, v in b.get("extra_props", {}).items():
             child.props[k] = v
+            
         if b["action"]:
-            action_node = KdlNode(name=b["action"])
             args = b.get("action_args") or []
             if not args:
                 legacy = b.get("action_arg", "")
                 if legacy:
                     args = [legacy]
-            action_node.args = list(args)
-            child.children.append(action_node)
-        binds_node.children.append(child)
+            
+            if child.children:
+                action_node = child.children[0]
+                action_node.name = b["action"]
+                action_node.args = list(args)
+                child.children = [action_node]
+            else:
+                action_node = KdlNode(name=b["action"])
+                action_node.args = list(args)
+                action_node.leading_trivia = " "
+                child.children.append(action_node)
+        else:
+            child.children.clear()
+            
+        new_children.append(child)
+        
+    if salvaged_trivia:
+        binds_node.children_trailing_trivia = salvaged_trivia + binds_node.children_trailing_trivia
+        
+    binds_node.children = new_children
 
 
 def _build_key_bindings_map(binds: list[dict], viz=None) -> dict[str, list[dict]]:
@@ -715,6 +751,7 @@ class BindingsPage(BasePage):
                 locked_row.get_active(),
                 repeat_row.get_active(),
                 bind.get("extra_props", {}) if bind else {},
+                node=bind.get("_node") if bind else None,
             )
             if idx >= 0:
                 self._binds[idx] = new_bind

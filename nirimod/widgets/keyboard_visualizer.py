@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 
 try:
-    import cairo
+    import cairo  # noqa: F401
     HAS_CAIRO = True
 except ImportError:
     HAS_CAIRO = False
@@ -218,6 +218,7 @@ class KeyboardVisualizer(Gtk.Box):
         self._area.set_content_height(230)
 
         self._aspect_frame = Gtk.AspectFrame(ratio=2.4, obey_child=False)
+        self._aspect_frame.set_hexpand(True)
         self._aspect_frame.set_child(self._area)
         self.append(self._aspect_frame)
 

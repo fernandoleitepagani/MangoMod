@@ -9,6 +9,18 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
+import math
+
+
+def _rounded_rect(cr, x, y, w, h, r):
+    cr.new_sub_path()
+    cr.arc(x + w - r, y + r, r, -math.pi / 2, 0)
+    cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
+    cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi)
+    cr.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
+    cr.close_path()
+
+
 from gi.repository import Adw, Gtk
 
 from nirimod import niri_ipc
@@ -54,7 +66,7 @@ class OutputsPage(BasePage):
         canvas_frame.set_margin_bottom(8)
 
         self._canvas = Gtk.DrawingArea()
-        self._canvas.set_content_height(200)
+        self._canvas.set_content_height(350)
         self._canvas.set_draw_func(self._draw_canvas)
         canvas_frame.set_child(self._canvas)
         content.append(canvas_frame)
@@ -64,6 +76,10 @@ class OutputsPage(BasePage):
         drag.connect("drag-update", self._on_drag_update)
         drag.connect("drag-end", self._on_drag_end)
         self._canvas.add_controller(drag)
+        
+        click = Gtk.GestureClick()
+        click.connect("pressed", self._on_canvas_click)
+        self._canvas.add_controller(click)
 
         self._out_combo = Adw.ComboRow(title="Monitor")
         self._out_combo.connect("notify::selected", self._on_output_selected)
@@ -73,7 +89,6 @@ class OutputsPage(BasePage):
 
         self._detail_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         content.append(self._detail_box)
-
 
         self.refresh()
         return tb
@@ -108,19 +123,52 @@ class OutputsPage(BasePage):
             cr.show_text("No outputs detected")
             return
 
-        max_x = max_y = 1
+        min_x = min_y = float("inf")
+        max_x = max_y = float("-inf")
         for o in self._outputs:
             pos = o.get("logical", {})
-            px = pos.get("x", 0) + pos.get("width", 1920)
-            py = pos.get("y", 0) + pos.get("height", 1080)
-            max_x = max(max_x, px)
-            max_y = max(max_y, py)
+            lx = pos.get("x", 0)
+            ly = pos.get("y", 0)
+            lw = pos.get("width", 1920)
+            lh = pos.get("height", 1080)
+            min_x = min(min_x, lx)
+            min_y = min(min_y, ly)
+            max_x = max(max_x, lx + lw)
+            max_y = max(max_y, ly + lh)
 
-        scale = min((width - 40) / max_x, (height - 20) / max_y) * 0.9
-        off_x = (width - max_x * scale) / 2
-        off_y = (height - max_y * scale) / 2
+        if min_x == float("inf"):
+            min_x = min_y = 0
+            max_x = 1920
+            max_y = 1080
+
+        bb_w = max_x - min_x
+        bb_h = max_y - min_y
+
+        scale = min(width / max(bb_w, 1), height / max(bb_h, 1)) * 0.85
+        off_x = (width - bb_w * scale) / 2 - min_x * scale
+        off_y = (height - bb_h * scale) / 2 - min_y * scale
+
+        if self._drag_output and hasattr(self, "_drag_start_scale"):
+            scale = self._drag_start_scale
+            off_x = self._drag_start_offset[0]
+            off_y = self._drag_start_offset[1]
+
         self._canvas_scale = scale
         self._canvas_offset = (off_x, off_y)
+        self._canvas_pixel_w = width
+        self._canvas_pixel_h = height
+
+        # grid background
+        cr.set_source_rgba(1, 1, 1, 0.03)
+        cr.set_line_width(1)
+        grid_size = 40
+        for gx in range(0, int(width), grid_size):
+            cr.move_to(gx, 0)
+            cr.line_to(gx, height)
+        for gy in range(0, int(height), grid_size):
+            cr.move_to(0, gy)
+            cr.line_to(width, gy)
+        cr.stroke()
 
         for i, o in enumerate(self._outputs):
             pos = o.get("logical", {})
@@ -133,21 +181,37 @@ class OutputsPage(BasePage):
                 self._current_out.get("name") if self._current_out else None
             )
 
-            cr.set_source_rgba(0, 0, 0, 0.15)
-            cr.rectangle(x + 3, y + 3, w, h)
+            radius = min(w, h) * 0.05
+            radius = max(4, min(radius, 12))
+
+            cr.set_source_rgba(0, 0, 0, 0.25)
+            _rounded_rect(cr, x + 4, y + 6, w, h, radius)
             cr.fill()
 
             if is_sel:
-                cr.set_source_rgba(0.2, 0.5, 0.9, 0.95)
+                cr.set_source_rgba(0.2, 0.5, 0.9, 1.0)
             else:
-                cr.set_source_rgba(0.12, 0.12, 0.14, 0.85)
-            cr.rectangle(x, y, w, h)
+                cr.set_source_rgba(0.15, 0.15, 0.17, 1.0)
+            _rounded_rect(cr, x, y, w, h, radius)
             cr.fill()
 
-            cr.set_source_rgba(1, 1, 1, 0.25)
-            cr.set_line_width(1.5)
-            cr.rectangle(x, y, w, h)
-            cr.stroke()
+            bezel = max(2, min(w, h) * 0.02)
+            cr.set_source_rgba(0.1, 0.1, 0.12, 1.0)
+            _rounded_rect(
+                cr, x + bezel, y + bezel, w - bezel * 2, h - bezel * 2, radius * 0.8
+            )
+            cr.fill()
+
+            cr.set_source_rgba(1, 1, 1, 0.04)
+            _rounded_rect(
+                cr,
+                x + bezel,
+                y + bezel,
+                w - bezel * 2,
+                (h - bezel * 2) * 0.4,
+                radius * 0.8,
+            )
+            cr.fill()
 
             name = o.get("name", f"Output {i}")
             mode_idx = o.get("current_mode")
@@ -157,25 +221,41 @@ class OutputsPage(BasePage):
                 if isinstance(mode_idx, int) and 0 <= mode_idx < len(modes)
                 else {}
             )
+            out_scale = o.get("logical", {}).get("scale", 1.0)
             res = f"{mode.get('width', '?')}×{mode.get('height', '?')}"
-            cr.set_source_rgba(1, 1, 1, 0.95)
+            scale_text = f"Scale: {out_scale}x"
+
+            cr.set_source_rgba(1, 1, 1, 0.95 if is_sel else 0.7)
+
             cr.select_font_face("Sans", 0, 1)
-            cr.set_font_size(max(9, min(13, w / 12)))
+            font_size = max(10, min(16, w / 10))
+            cr.set_font_size(font_size)
             te = cr.text_extents(name)
-            cr.move_to(x + w / 2 - te.width / 2, y + h / 2)
+            cr.move_to(x + w / 2 - te.width / 2, y + h / 2 - font_size * 0.3)
             cr.show_text(name)
+
             cr.select_font_face("Sans", 0, 0)
-            cr.set_font_size(max(7, min(10, w / 16)))
+            res_size = max(8, min(12, w / 15))
+            cr.set_font_size(res_size)
             te2 = cr.text_extents(res)
-            cr.move_to(x + w / 2 - te2.width / 2, y + h / 2 + 14)
+            cr.move_to(x + w / 2 - te2.width / 2, y + h / 2 + res_size * 1.2)
             cr.show_text(res)
+
+            cr.set_source_rgba(0.6, 0.6, 0.65, 0.9 if is_sel else 0.6)
+            scale_size = max(7, min(11, w / 18))
+            cr.set_font_size(scale_size)
+            te3 = cr.text_extents(scale_text)
+            cr.move_to(
+                x + w / 2 - te3.width / 2, y + h / 2 + res_size * 1.2 + scale_size * 1.4
+            )
+            cr.show_text(scale_text)
 
     def _on_drag_begin(self, gesture, sx, sy):
         if not hasattr(self, "_canvas_scale"):
             return
         scale = self._canvas_scale
         ox, oy = self._canvas_offset
-        for o in self._outputs:
+        for o in reversed(self._outputs):
             pos = o.get("logical", {})
             x = ox + pos.get("x", 0) * scale
             y = oy + pos.get("y", 0) * scale
@@ -183,31 +263,173 @@ class OutputsPage(BasePage):
             h = pos.get("height", 1080) * scale
             if x <= sx <= x + w and y <= sy <= y + h:
                 self._drag_output = o["name"]
-
-                self._drag_offset = (sx - x, sy - y)
+                self._last_dx = 0
+                self._last_dy = 0
+                self._drag_current_lx = pos.get("x", 0)
+                self._drag_current_ly = pos.get("y", 0)
+                self._drag_start_scale = scale
+                self._drag_start_offset = (ox, oy)
                 return
 
     def _on_drag_update(self, gesture, dx, dy):
         if not self._drag_output or not hasattr(self, "_canvas_scale"):
             return
-        start_x, start_y = gesture.get_start_point()[1], gesture.get_start_point()[2]
-        scale = self._canvas_scale
-        ox, oy = self._canvas_offset
-        new_lx = round((start_x + dx - ox - self._drag_offset[0]) / scale / 10) * 10
-        new_ly = round((start_y + dy - oy - self._drag_offset[1]) / scale / 10) * 10
+
+        scale = getattr(self, "_drag_start_scale", self._canvas_scale)
+        delta_dx = dx - getattr(self, "_last_dx", 0)
+        delta_dy = dy - getattr(self, "_last_dy", 0)
+        self._last_dx = dx
+        self._last_dy = dy
+
+        self._drag_current_lx += delta_dx / scale
+        self._drag_current_ly += delta_dy / scale
+
+        new_lx = round(self._drag_current_lx / 10) * 10
+        new_ly = round(self._drag_current_ly / 10) * 10
+
+        drag_o = next(
+            (o for o in self._outputs if o.get("name") == self._drag_output), None
+        )
+        if not drag_o:
+            return
+
+        drag_w = drag_o.get("logical", {}).get("width", 1920)
+        drag_h = drag_o.get("logical", {}).get("height", 1080)
+
+        drag_scale_u = drag_o.get("logical", {}).get("scale", 1.0)
+        mode_idx_u = drag_o.get("current_mode")
+        modes_u = drag_o.get("modes", [])
+        m_u = (
+            modes_u[mode_idx_u]
+            if isinstance(mode_idx_u, int) and 0 <= mode_idx_u < len(modes_u)
+            else {}
+        )
+        pw_u = m_u.get("width", 1920)
+        ph_u = m_u.get("height", 1080)
+        t_u = drag_o.get("logical", {}).get("transform", "normal")
+        t_str_u = str(t_u).lower().replace("_", "-")
+        if t_str_u in ["90", "270", "flipped-90", "flipped-270"]:
+            pw_u, ph_u = ph_u, pw_u
+
+        exact_drag_w = pw_u / drag_scale_u
+        exact_drag_h = ph_u / drag_scale_u
+
+        max_allowed_x = 32768
+        max_allowed_y = 32768
+
+        new_lx = max(0, min(max_allowed_x - drag_w, new_lx))
+        new_ly = max(0, min(max_allowed_y - drag_h, new_ly))
+        snap_dist = 40 / scale
+
+        import math
+
+        # Snapping to edges
         for o in self._outputs:
-            if o["name"] == self._drag_output:
-                if "logical" not in o:
-                    o["logical"] = {}
-                o["logical"]["x"] = max(0, new_lx)
-                o["logical"]["y"] = max(0, new_ly)
+            if o.get("name") == self._drag_output:
+                continue
+            ox2 = o.get("logical", {}).get("x", 0)
+            oy2 = o.get("logical", {}).get("y", 0)
+
+            # Use exact fractional dimensions to prevent Niri overlap rejection
+            scale2 = o.get("logical", {}).get("scale", 1.0)
+            mode_idx = o.get("current_mode")
+            modes = o.get("modes", [])
+            m = (
+                modes[mode_idx]
+                if isinstance(mode_idx, int) and 0 <= mode_idx < len(modes)
+                else {}
+            )
+            pw2 = m.get("width", 1920)
+            ph2 = m.get("height", 1080)
+
+            t2 = o.get("logical", {}).get("transform", "normal")
+            t_str2 = str(t2).lower().replace("_", "-")
+            if t_str2 in ["90", "270", "flipped-90", "flipped-270"]:
+                pw2, ph2 = ph2, pw2
+
+            exact_w = pw2 / scale2
+            exact_h = ph2 / scale2
+
+            ow2 = o.get("logical", {}).get("width", math.ceil(exact_w))
+            oh2 = o.get("logical", {}).get("height", math.ceil(exact_h))
+
+            y_overlaps = not (
+                new_ly + drag_h < oy2 - snap_dist or oy2 + oh2 + snap_dist < new_ly
+            )
+            x_overlaps = not (
+                new_lx + drag_w < ox2 - snap_dist or ox2 + ow2 + snap_dist < new_lx
+            )
+
+            if y_overlaps:
+                if abs((new_lx + drag_w) - ox2) < snap_dist:
+                    new_lx = math.floor(ox2 - exact_drag_w)
+                elif abs(new_lx - (ox2 + exact_w)) < snap_dist:
+                    new_lx = math.ceil(ox2 + exact_w)
+                elif abs(new_lx - ox2) < snap_dist:
+                    new_lx = ox2
+                elif abs((new_lx + drag_w) - (ox2 + exact_w)) < snap_dist:
+                    new_lx = math.ceil(ox2 + exact_w) - math.ceil(exact_drag_w)
+
+            if x_overlaps:
+                if abs((new_ly + drag_h) - oy2) < snap_dist:
+                    new_ly = math.floor(oy2 - exact_drag_h)
+                elif abs(new_ly - (oy2 + exact_h)) < snap_dist:
+                    new_ly = math.ceil(oy2 + exact_h)
+                elif abs(new_ly - oy2) < snap_dist:
+                    new_ly = oy2
+                elif abs((new_ly + drag_h) - (oy2 + exact_h)) < snap_dist:
+                    new_ly = math.ceil(oy2 + exact_h) - math.ceil(exact_drag_h)
+
+        if "logical" not in drag_o:
+            drag_o["logical"] = {}
+        drag_o["logical"]["x"] = new_lx
+        drag_o["logical"]["y"] = new_ly
+
         if self._canvas:
             self._canvas.queue_draw()
 
     def _on_drag_end(self, gesture, dx, dy):
         if self._drag_output:
+            drag_o = next(
+                (o for o in self._outputs if o.get("name") == self._drag_output), None
+            )
+            if drag_o:
+                new_lx = drag_o.get("logical", {}).get("x", 0)
+                new_ly = drag_o.get("logical", {}).get("y", 0)
+                drag_w = drag_o.get("logical", {}).get("width", 1920)
+                drag_h = drag_o.get("logical", {}).get("height", 1080)
+
+                max_allowed_x = 32768
+                max_allowed_y = 32768
+
+                new_lx = max(0, min(max_allowed_x - drag_w, new_lx))
+                new_ly = max(0, min(max_allowed_y - drag_h, new_ly))
+
+                drag_o["logical"]["x"] = new_lx
+                drag_o["logical"]["y"] = new_ly
+                if self._canvas:
+                    self._canvas.queue_draw()
+
             self._apply_position(self._drag_output)
             self._drag_output = None
+
+    def _on_canvas_click(self, gesture, n_press, x, y):
+        if not hasattr(self, "_canvas_scale"):
+            return
+            
+        scale = self._canvas_scale
+        ox, oy = self._canvas_offset
+        
+        for i, o in reversed(list(enumerate(self._outputs))):
+            pos = o.get("logical", {})
+            mx = ox + pos.get("x", 0) * scale
+            my = oy + pos.get("y", 0) * scale
+            mw = pos.get("width", 1920) * scale
+            mh = pos.get("height", 1080) * scale
+            
+            if mx <= x <= mx + mw and my <= y <= my + mh:
+                self._out_combo.set_selected(i)
+                return
 
     def _apply_position(self, name: str):
         o = next((x for x in self._outputs if x["name"] == name), None)
@@ -220,8 +442,8 @@ class OutputsPage(BasePage):
         if pos_node is None:
             pos_node = KdlNode(name="position")
             out_node.children.append(pos_node)
-        pos_node.props["x"] = pos.get("x", 0)
-        pos_node.props["y"] = pos.get("y", 0)
+        pos_node.props["x"] = int(round(pos.get("x", 0)))
+        pos_node.props["y"] = int(round(pos.get("y", 0)))
 
         if self._current_out and self._current_out.get("name") == name:
             if hasattr(self, "_pos_x_adj"):
@@ -273,8 +495,9 @@ class OutputsPage(BasePage):
             lambda r, _: self._on_mode_changed(name, modes, r.get_selected()),
         )
 
+        scale_val = round(output.get("logical", {}).get("scale", 1.0), 3)
         scale_adj = Gtk.Adjustment(
-            value=output.get("logical", {}).get("scale", 1.0),
+            value=scale_val,
             lower=0.25,
             upper=4.0,
             step_increment=0.05,
@@ -431,16 +654,38 @@ class OutputsPage(BasePage):
 
         assert out_node is not None
 
-        # Only populate default fields when first creating the node, so subsequent
-        # edits don't overwrite user-set values with stale live data from niri.
         if is_new:
             self._ensure_output_fields(out_node, name)
 
-        # Ensure the specified order in nirimod.kdl output block
         order = {"mode": 0, "scale": 1, "transform": 2, "position": 3}
         out_node.children.sort(key=lambda c: order.get(c.name, 999))
 
         return out_node
+
+    def _update_logical_dims(self, o: dict):
+        if "logical" not in o:
+            o["logical"] = {}
+        mode_idx = o.get("current_mode")
+        modes = o.get("modes", [])
+        m = (
+            modes[mode_idx]
+            if isinstance(mode_idx, int) and 0 <= mode_idx < len(modes)
+            else {}
+        )
+        pw = m.get("width", 1920)
+        ph = m.get("height", 1080)
+
+        scale = o["logical"].get("scale", 1.0)
+        if scale <= 0:
+            scale = 1.0
+
+        t = o["logical"].get("transform", "normal")
+        t_str = str(t).lower().replace("_", "-")
+        if t_str in ["90", "270", "flipped-90", "flipped-270"]:
+            pw, ph = ph, pw
+
+        o["logical"]["width"] = round(pw / scale)
+        o["logical"]["height"] = round(ph / scale)
 
     def _on_mode_changed(self, name: str, modes: list, idx: int):
         if not (0 <= idx < len(modes)):
@@ -449,12 +694,36 @@ class OutputsPage(BasePage):
         mode_str = f"{m.get('width', 0)}x{m.get('height', 0)}@{m.get('refresh_rate', 0) / 1000:.3f}"
         out_node = self._get_or_create_out_node(name)
         set_child_arg(out_node, "mode", mode_str)
+
+        o = next((x for x in self._outputs if x.get("name") == name), None)
+        if o:
+            o["current_mode"] = idx
+            self._update_logical_dims(o)
+
         self._commit("output mode")
+        if self._canvas:
+            self._canvas.queue_draw()
 
     def _set_output_prop(self, name: str, prop: str, value):
+        if prop == "scale" and isinstance(value, float):
+            value = round(value, 3)
+            
         out_node = self._get_or_create_out_node(name)
         set_child_arg(out_node, prop, value)
+
+        o = next((x for x in self._outputs if x.get("name") == name), None)
+        if o:
+            if "logical" not in o:
+                o["logical"] = {}
+            if prop == "scale":
+                o["logical"]["scale"] = value
+            elif prop == "transform":
+                o["logical"]["transform"] = value
+            self._update_logical_dims(o)
+
         self._commit(f"output {prop}")
+        if self._canvas:
+            self._canvas.queue_draw()
 
     def _set_output_pos(self, name: str, x: int, y: int):
         out_node = self._get_or_create_out_node(name)
@@ -462,8 +731,17 @@ class OutputsPage(BasePage):
         if pos_node is None:
             pos_node = KdlNode(name="position")
             out_node.children.append(pos_node)
-        pos_node.props["x"] = x
-        pos_node.props["y"] = y
+
+        pos_node.props["x"] = int(round(x))
+        pos_node.props["y"] = int(round(y))
+
+        o = next((out for out in self._outputs if out.get("name") == name), None)
+        if o:
+            if "logical" not in o:
+                o["logical"] = {}
+            o["logical"]["x"] = x
+            o["logical"]["y"] = y
+
         self._commit("output position")
         if self._canvas:
             self._canvas.queue_draw()

@@ -702,7 +702,7 @@ class NiriModWindow(Adw.ApplicationWindow):
     def _check_kofi(self):
         from nirimod import app_settings
 
-        if app_settings.get("kofi_dont_show", False):
+        if app_settings.get("kofi_v2_dont_show", False):
             return
         self._show_kofi_dialog()
 
@@ -723,13 +723,13 @@ class NiriModWindow(Adw.ApplicationWindow):
         dialog.set_default_response("kofi")
 
         dont_show_check = Gtk.CheckButton(label="Don't show this again on startup")
-        dont_show_check.set_active(app_settings.get("kofi_dont_show", False))
+        dont_show_check.set_active(app_settings.get("kofi_v2_dont_show", False))
         dont_show_check.set_halign(Gtk.Align.CENTER)
         dont_show_check.set_margin_top(4)
         dialog.set_extra_child(dont_show_check)
 
         def _on_kofi_response(dlg, response):
-            app_settings.set("kofi_dont_show", dont_show_check.get_active())
+            app_settings.set("kofi_v2_dont_show", dont_show_check.get_active())
             if response == "kofi":
                 Gio.AppInfo.launch_default_for_uri("https://ko-fi.com/srinivasr", None)
 
