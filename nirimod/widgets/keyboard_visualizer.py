@@ -175,6 +175,27 @@ _COL_FRAME_BG     = _rgb(10, 10, 12)
 _COL_FRAME_BORDER = _rgb(255, 255, 255, 0.07)
 
 
+class _AspectDrawingArea(Gtk.DrawingArea):
+    def __init__(self, ratio=2.43):
+        super().__init__()
+        self._ratio = ratio
+        self.set_hexpand(True)
+
+    def do_get_request_mode(self):
+        return Gtk.SizeRequestMode.HEIGHT_FOR_WIDTH
+
+    def do_measure(self, orientation, for_size):
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            return (400, 560, -1, -1)
+        else:
+            if for_size > 0:
+                h = int(for_size / self._ratio)
+                return (h, h, -1, -1)
+            else:
+                h = int(560 / self._ratio)
+                return (h, h, -1, -1)
+
+
 class KeyboardVisualizer(Gtk.Box):
     """Cairo-rendered ANSI QWERTY keyboard with niri binding overlays."""
 
@@ -211,16 +232,9 @@ class KeyboardVisualizer(Gtk.Box):
             return
 
         # Drawing area
-        self._area = Gtk.DrawingArea()
-        self._area.set_hexpand(True)
+        self._area = _AspectDrawingArea(ratio=2.43)
         self._area.set_draw_func(self._draw)
-        self._area.set_content_width(560)
-        self._area.set_content_height(230)
-
-        self._aspect_frame = Gtk.AspectFrame(ratio=2.4, obey_child=False)
-        self._aspect_frame.set_hexpand(True)
-        self._aspect_frame.set_child(self._area)
-        self.append(self._aspect_frame)
+        self.append(self._area)
 
         click = Gtk.GestureClick()
         click.connect("released", self._on_click)

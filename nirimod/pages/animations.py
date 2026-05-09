@@ -1168,6 +1168,11 @@ class AnimationsPage(BasePage):
         if an is None:
             an = KdlNode(anim_key)
             anim.children.append(an)
+            
+        if prop == "duration-ms":
+            from nirimod.kdl_parser import remove_child
+            remove_child(an, "spring")
+            
         set_child_arg(an, prop, value)
         self._commit(f"animation {anim_key} {prop}")
 
@@ -1184,7 +1189,9 @@ class AnimationsPage(BasePage):
         if old_easing is not None:
             an.children.remove(old_easing)
 
-        # Write correct Niri syntax: curve "cubic-bezier" x1 y1 x2 y2
+        from nirimod.kdl_parser import remove_child
+        remove_child(an, "spring")
+
         curve_node = an.get_child("curve")
         if curve_node is None:
             curve_node = KdlNode("curve")

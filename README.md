@@ -132,6 +132,16 @@ If you split your niri config with `include` directives, NiriMod handles that. I
 
 ## Install
 
+### AUR (Arch Linux)
+
+NiriMod is available in the AUR as `nirimod-git`.
+
+```bash
+yay -S nirimod-git
+```
+
+### Script (Other Distros)
+
 ```bash
 curl -sSL https://raw.githubusercontent.com/srinivasr/nirimod/main/install.sh | bash
 ```
