@@ -304,8 +304,7 @@ class BindingsPage(BasePage):
         switcher_box.append(self._btn_list)
         header_box.append(switcher_box)
         
-        tb.add_top_bar(header_box)
-
+        self._view_stack.set_vexpand(True)
         list_page_widget = self._build_list_tab()
         self._view_stack.add_named(list_page_widget, "list")
 
@@ -316,7 +315,11 @@ class BindingsPage(BasePage):
         self._view_stack.set_visible_child_name("keyboard")
         self._btn_physical.set_active(True)
 
-        tb.set_content(self._view_stack)
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        main_box.append(header_box)
+        main_box.append(self._view_stack)
+
+        tb.set_content(main_box)
 
         self.refresh()
         self._start_file_monitor()
@@ -424,6 +427,7 @@ class BindingsPage(BasePage):
         self._viz.connect("key-selected", self._on_kb_key_selected)
         self._viz.connect("edit-binding", self._on_kb_edit_binding)
         self._viz.connect("add-binding", self._on_kb_add_binding)
+        self._viz.connect("delete-binding", self._on_kb_delete_binding)
         outer.append(self._viz)
 
         return scroll
@@ -495,41 +499,6 @@ class BindingsPage(BasePage):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         card.set_size_request(240, 140)
         card.add_css_class("nm-binding-card")
-        # Custom styling for the card
-        provider = Gtk.CssProvider()
-        provider.load_from_data(
-            b".nm-binding-card { "
-            b"  background: rgba(30, 30, 35, 0.6); "
-            b"  border: 1px solid rgba(255, 255, 255, 0.08); "
-            b"  border-radius: 12px; "
-            b"  padding: 16px; "
-            b"  transition: all 200ms ease; "
-            b"} "
-            b".nm-binding-card:hover { "
-            b"  background: rgba(45, 45, 50, 0.8); "
-            b"  border-color: rgba(147, 51, 234, 0.4); "
-            b"}"
-            b".nm-binding-actions-label { "
-            b"  color: rgba(255, 255, 255, 0.4); "
-            b"  font-weight: 800; "
-            b"  letter-spacing: 0.05em; "
-            b"  font-size: 0.7rem; "
-            b"} "
-            b".nm-binding-action-name { "
-            b"  color: rgba(192, 132, 252, 1.0); "
-            b"  font-weight: 600; "
-            b"  font-size: 1.0rem; "
-            b"} "
-            b".nm-keycap-purple { "
-            b"  background: #581c87; "
-            b"  color: white; "
-            b"  border-radius: 6px; "
-            b"  padding: 2px 8px; "
-            b"  font-weight: bold; "
-            b"  font-size: 0.8rem; "
-            b"}"
-        )
-        card.get_style_context().add_provider(provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
         # 1. Keycaps Row
         keys_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -622,6 +591,13 @@ class BindingsPage(BasePage):
         try:
             idx = self._binds.index(bind_dict)
             self._show_bind_dialog(bind_dict, idx)
+        except ValueError:
+            pass
+
+    def _on_kb_delete_binding(self, viz, bind_dict):
+        try:
+            idx = self._binds.index(bind_dict)
+            self._on_delete_clicked(idx)
         except ValueError:
             pass
 

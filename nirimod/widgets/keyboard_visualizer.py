@@ -203,6 +203,7 @@ class KeyboardVisualizer(Gtk.Box):
         "key-selected": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
         "edit-binding": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
         "add-binding": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
+        "delete-binding": (GObject.SignalFlags.RUN_FIRST, None, (object,)),
     }
 
     def __init__(self):
@@ -244,6 +245,7 @@ class KeyboardVisualizer(Gtk.Box):
             self._panel = _ActionPanel(
                 on_edit=lambda b: self.emit("edit-binding", b),
                 on_add=lambda k: self.emit("add-binding", k),
+                on_delete=lambda b: self.emit("delete-binding", b),
             )
             self.append(self._panel)
 
@@ -536,10 +538,12 @@ class KeyboardVisualizer(Gtk.Box):
 class _ActionPanel(Gtk.Box):
     """Shows the binding details for the currently selected key."""
 
-    def __init__(self, on_edit=None, on_add=None):
+    def __init__(self, on_edit=None, on_add=None, on_delete=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._on_edit = on_edit
         self._on_add = on_add
+        self._on_delete = on_delete
+        self._current_key_id = None
         self.add_css_class("nm-kb-action-panel")
         self.set_visible(False)
 
@@ -560,6 +564,16 @@ class _ActionPanel(Gtk.Box):
         self._count_label.add_css_class("dim-label")
         self._count_label.add_css_class("caption")
         header.append(self._count_label)
+
+        self._header_add_btn = Gtk.Button(icon_name="list-add-symbolic")
+        self._header_add_btn.add_css_class("flat")
+        self._header_add_btn.add_css_class("circular")
+        self._header_add_btn.set_tooltip_text("Add another binding for this key")
+        self._header_add_btn.set_valign(Gtk.Align.CENTER)
+        self._header_add_btn.set_visible(False)
+        self._header_add_btn.connect("clicked", self._on_header_add_clicked)
+        header.append(self._header_add_btn)
+
         self.append(header)
 
         self.append(Gtk.Separator())
@@ -574,7 +588,12 @@ class _ActionPanel(Gtk.Box):
 
         self.set_visible(False)
 
+    def _on_header_add_clicked(self, *_):
+        if self._on_add and self._current_key_id:
+            self._on_add(self._current_key_id)
+
     def update(self, key_id: str, binds: list[dict]):
+        self._current_key_id = key_id
         while True:
             c = self._grp_container.get_first_child()
             if c is None:
@@ -586,6 +605,7 @@ class _ActionPanel(Gtk.Box):
         if not binds:
             self._key_label.set_label(key_id.upper())
             self._count_label.set_label("No bindings")
+            self._header_add_btn.set_visible(False)
             
             add_btn = Gtk.Button(label=f"Create Binding for {key_id.upper()}")
             add_btn.add_css_class("suggested-action")
@@ -601,6 +621,7 @@ class _ActionPanel(Gtk.Box):
             self._key_label.set_label(key_id.upper())
             n = len(binds)
             self._count_label.set_label(f"{n} binding" + ("s" if n != 1 else ""))
+            self._header_add_btn.set_visible(True)
             for b in binds:
                 keysym = b.get("keysym", "?")
                 action = b.get("action", "")
@@ -658,6 +679,15 @@ class _ActionPanel(Gtk.Box):
                 if self._on_edit:
                     edit_btn.connect("clicked", lambda *_, bind_ref=b: self._on_edit(bind_ref))
                 row.add_suffix(edit_btn)
+
+                del_btn = Gtk.Button(icon_name="user-trash-symbolic")
+                del_btn.add_css_class("flat")
+                del_btn.add_css_class("circular")
+                del_btn.add_css_class("error")
+                del_btn.set_valign(Gtk.Align.CENTER)
+                if self._on_delete:
+                    del_btn.connect("clicked", lambda *_, bind_ref=b: self._on_delete(bind_ref))
+                row.add_suffix(del_btn)
 
                 new_grp.add(row)
 

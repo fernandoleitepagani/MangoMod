@@ -290,4 +290,36 @@ toast label { font-weight: 500; }
     font-size: 18px;
     min-width: 28px;
 }
+
+/* --- Bindings Page --- */
+.nm-binding-card {
+    background: rgba(30, 30, 35, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 200ms ease;
+}
+.nm-binding-card:hover {
+    background: rgba(45, 45, 50, 0.8);
+    border-color: rgba(147, 51, 234, 0.4);
+}
+.nm-binding-actions-label {
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    font-size: 0.7rem;
+}
+.nm-binding-action-name {
+    color: rgba(192, 132, 252, 1.0);
+    font-weight: 600;
+    font-size: 1.0rem;
+}
+.nm-keycap-purple {
+    background: #581c87;
+    color: white;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-weight: bold;
+    font-size: 0.8rem;
+}
 """.encode("utf-8")

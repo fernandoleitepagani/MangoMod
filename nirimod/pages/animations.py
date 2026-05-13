@@ -107,7 +107,7 @@ class BezierEditor(Gtk.DrawingArea):
         click.connect("released", self._on_release)
         self.add_controller(click)
 
-        self._start_anim()
+        self.add_tick_callback(self._on_tick)
 
     def set_curve(self, x1, y1, x2, y2):
         self._cp = [x1, y1, x2, y2]
@@ -116,19 +116,28 @@ class BezierEditor(Gtk.DrawingArea):
     def get_curve(self):
         return tuple(self._cp)
 
-    def _start_anim(self):
-        self._anim_id = GLib.timeout_add(16, self._tick_anim)
-
-    def _tick_anim(self):
-        self._ball_t += 0.012 * self._ball_dir
+    def _on_tick(self, widget, frame_clock):
+        current_time = frame_clock.get_frame_time()
+        if not hasattr(self, "_last_time"):
+            self._last_time = current_time
+            return True
+            
+        dt = (current_time - self._last_time) / 1_000_000.0
+        self._last_time = current_time
+        
+        # Move at a constant speed of ~0.75 units per second
+        speed = 0.75
+        self._ball_t += (dt * speed) * self._ball_dir
+        
         if self._ball_t >= 1.0:
             self._ball_t = 1.0
             self._ball_dir = -1
         elif self._ball_t <= 0.0:
             self._ball_t = 0.0
             self._ball_dir = 1
+            
         self.queue_draw()
-        return GLib.SOURCE_CONTINUE
+        return True
 
     def _bezier_pt(self, t):
         x1, y1, x2, y2 = self._cp
@@ -384,8 +393,10 @@ class AnimationsPage(BasePage):
         switcher_box.append(self._btn_presets)
         header_box.append(switcher_box)
         
-        tb.add_top_bar(header_box)
-
+        # Custom Header (matches Workspace View / Keybindings aesthetic)
+        self._view_stack = Adw.ViewStack()
+        self._view_stack.set_vexpand(True)
+        
         # Tabs
         custom_widget = self._build_custom_tab()
         self._view_stack.add_named(custom_widget, "custom")
@@ -397,7 +408,11 @@ class AnimationsPage(BasePage):
         self._view_stack.set_visible_child_name("custom")
         self._btn_custom.set_active(True)
 
-        tb.set_content(self._view_stack)
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        main_box.append(header_box)
+        main_box.append(self._view_stack)
+
+        tb.set_content(main_box)
 
         self._update_header()
         return tb
@@ -790,18 +805,29 @@ class AnimationsPage(BasePage):
         bust_cache_attr: str,
         rows_attr: str,
         source_label: str,
+        repo_url: str,
     ) -> Adw.PreferencesGroup:
         """Generic builder for a community-preset PreferencesGroup."""
         import sys
         mod = sys.modules[__name__]
 
+        header_btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+
+        repo_btn = Gtk.Button(icon_name="web-browser-symbolic")
+        repo_btn.set_tooltip_text("View repository on GitHub")
+        repo_btn.add_css_class("flat")
+        repo_btn.add_css_class("circular")
+        repo_btn.connect("clicked", lambda _b: Gtk.show_uri(None, repo_url, 0))
+        header_btns.append(repo_btn)
+
         refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic")
         refresh_btn.set_tooltip_text("Refresh preset list from GitHub")
         refresh_btn.add_css_class("flat")
         refresh_btn.add_css_class("circular")
+        header_btns.append(refresh_btn)
 
         grp = Adw.PreferencesGroup(title=title, description=description)
-        grp.set_header_suffix(refresh_btn)
+        grp.set_header_suffix(header_btns)
 
         spinner = Gtk.Spinner()
         spinner.start()
@@ -876,6 +902,7 @@ class AnimationsPage(BasePage):
             bust_cache_attr="_nirimation_cache",
             rows_attr="_nirimation_rows",
             source_label="XansiVA/nirimation",
+            repo_url="https://github.com/XansiVA/nirimation",
         )
 
     def _build_jgarza_group(self) -> Adw.PreferencesGroup:
@@ -887,6 +914,7 @@ class AnimationsPage(BasePage):
             bust_cache_attr="_jgarza_cache",
             rows_attr="_jgarza_rows",
             source_label="jgarza9788/niri-animation-collection",
+            repo_url="https://github.com/jgarza9788/niri-animation-collection",
         )
 
     def _make_preset_row(self, entry: dict, source_label: str) -> Adw.ActionRow:
@@ -895,18 +923,6 @@ class AnimationsPage(BasePage):
             title=entry["display_name"],
             subtitle=entry["name"],
         )
-
-        # GitHub link button
-        link_btn = Gtk.Button(icon_name="web-browser-symbolic")
-        link_btn.set_tooltip_text("View on GitHub")
-        link_btn.add_css_class("flat")
-        link_btn.add_css_class("circular")
-        link_btn.set_valign(Gtk.Align.CENTER)
-        link_btn.connect(
-            "clicked",
-            lambda _b, u=entry["html_url"]: Gtk.show_uri(None, u, 0),
-        )
-        row.add_suffix(link_btn)
 
         # Download-to-disk button
         dl_btn = Gtk.Button(icon_name="folder-download-symbolic")
