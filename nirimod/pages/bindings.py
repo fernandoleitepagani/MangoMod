@@ -719,7 +719,14 @@ class BindingsPage(BasePage):
             action_idx = act_combo.get_selected()
             action = NIRI_ACTIONS[action_idx] if action_idx < len(NIRI_ACTIONS) else ""
             arg_text = arg_row.get_text().strip()
-            new_args = arg_text.split() if arg_text else []
+            if action == "spawn-sh":
+                new_args = [arg_text] if arg_text else []
+            else:
+                import shlex
+                try:
+                    new_args = shlex.split(arg_text) if arg_text else []
+                except ValueError:
+                    new_args = arg_text.split() if arg_text else []
             new_bind = _make_bind(
                 keysym,
                 action,

@@ -189,13 +189,13 @@ class OutputsPage(BasePage):
             cr.fill()
 
             if is_sel:
-                cr.set_source_rgba(0.2, 0.5, 0.9, 1.0)
+                cr.set_source_rgba(155 / 255, 109 / 255, 1.0, 1.0)
             else:
                 cr.set_source_rgba(0.15, 0.15, 0.17, 1.0)
             _rounded_rect(cr, x, y, w, h, radius)
             cr.fill()
 
-            bezel = max(2, min(w, h) * 0.02)
+            bezel = max(1, min(w, h) * 0.01)
             cr.set_source_rgba(0.1, 0.1, 0.12, 1.0)
             _rounded_rect(
                 cr, x + bezel, y + bezel, w - bezel * 2, h - bezel * 2, radius * 0.8
@@ -317,8 +317,8 @@ class OutputsPage(BasePage):
         max_allowed_x = 32768
         max_allowed_y = 32768
 
-        new_lx = max(0, min(max_allowed_x - drag_w, new_lx))
-        new_ly = max(0, min(max_allowed_y - drag_h, new_ly))
+        new_lx = min(max_allowed_x - drag_w, new_lx)
+        new_ly = min(max_allowed_y - drag_h, new_ly)
         snap_dist = 40 / scale
 
         import math
@@ -360,7 +360,29 @@ class OutputsPage(BasePage):
                 new_lx + drag_w < ox2 - snap_dist or ox2 + ow2 + snap_dist < new_lx
             )
 
+            best_x_dist = float("inf")
+            best_y_dist = float("inf")
+
             if y_overlaps:
+                best_x_dist = min(
+                    abs((new_lx + drag_w) - ox2),
+                    abs(new_lx - (ox2 + exact_w)),
+                    abs(new_lx - ox2),
+                    abs((new_lx + drag_w) - (ox2 + exact_w)),
+                )
+
+            if x_overlaps:
+                best_y_dist = min(
+                    abs((new_ly + drag_h) - oy2),
+                    abs(new_ly - (oy2 + exact_h)),
+                    abs(new_ly - oy2),
+                    abs((new_ly + drag_h) - (oy2 + exact_h)),
+                )
+
+            do_x_snap = y_overlaps and (best_x_dist <= best_y_dist or not x_overlaps)
+            do_y_snap = x_overlaps and (best_y_dist < best_x_dist or not y_overlaps)
+
+            if do_x_snap:
                 if abs((new_lx + drag_w) - ox2) < snap_dist:
                     new_lx = math.floor(ox2 - exact_drag_w)
                 elif abs(new_lx - (ox2 + exact_w)) < snap_dist:
@@ -370,7 +392,7 @@ class OutputsPage(BasePage):
                 elif abs((new_lx + drag_w) - (ox2 + exact_w)) < snap_dist:
                     new_lx = math.ceil(ox2 + exact_w) - math.ceil(exact_drag_w)
 
-            if x_overlaps:
+            if do_y_snap:
                 if abs((new_ly + drag_h) - oy2) < snap_dist:
                     new_ly = math.floor(oy2 - exact_drag_h)
                 elif abs(new_ly - (oy2 + exact_h)) < snap_dist:
@@ -390,27 +412,33 @@ class OutputsPage(BasePage):
 
     def _on_drag_end(self, gesture, dx, dy):
         if self._drag_output:
-            drag_o = next(
-                (o for o in self._outputs if o.get("name") == self._drag_output), None
+            min_x = min(
+                (o.get("logical", {}).get("x", 0) for o in self._outputs), default=0
             )
-            if drag_o:
-                new_lx = drag_o.get("logical", {}).get("x", 0)
-                new_ly = drag_o.get("logical", {}).get("y", 0)
-                drag_w = drag_o.get("logical", {}).get("width", 1920)
-                drag_h = drag_o.get("logical", {}).get("height", 1080)
+            min_y = min(
+                (o.get("logical", {}).get("y", 0) for o in self._outputs), default=0
+            )
 
-                max_allowed_x = 32768
-                max_allowed_y = 32768
+            if min_x != 0 or min_y != 0:
+                for o in self._outputs:
+                    if "logical" not in o:
+                        o["logical"] = {}
+                    o["logical"]["x"] = o["logical"].get("x", 0) - min_x
+                    o["logical"]["y"] = o["logical"].get("y", 0) - min_y
 
-                new_lx = max(0, min(max_allowed_x - drag_w, new_lx))
-                new_ly = max(0, min(max_allowed_y - drag_h, new_ly))
+            if self._canvas:
+                self._canvas.queue_draw()
 
-                drag_o["logical"]["x"] = new_lx
-                drag_o["logical"]["y"] = new_ly
-                if self._canvas:
-                    self._canvas.queue_draw()
+            for o in self._outputs:
+                self._apply_position(o["name"])
 
-            self._apply_position(self._drag_output)
+            if self._current_out:
+                cur_pos = self._current_out.get("logical", {})
+                if hasattr(self, "_pos_x_adj"):
+                    self._pos_x_adj.set_value(cur_pos.get("x", 0))
+                if hasattr(self, "_pos_y_adj"):
+                    self._pos_y_adj.set_value(cur_pos.get("y", 0))
+
             self._drag_output = None
 
     def _on_canvas_click(self, gesture, n_press, x, y):
