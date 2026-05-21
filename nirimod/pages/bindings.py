@@ -18,7 +18,7 @@ from nirimod.pages.base import BasePage
 from nirimod.widgets import KeyboardVisualizer, normalize_key_id
 
 
-MODIFIERS = ["Super", "Ctrl", "Alt", "Shift"]
+MODIFIERS = ["Mod", "Super", "Ctrl", "Alt", "Shift"]
 
 NIRI_ACTIONS = [
     "close-window",
@@ -197,7 +197,6 @@ def _write_binds_to_node(binds_list: list[dict], binds_node: KdlNode):
 
 
 def _build_key_bindings_map(binds: list[dict], viz=None) -> dict[str, list[dict]]:
-    # bucket binds by their actual physical key ID so the visualizer can highlight them
     result: dict[str, list[dict]] = {}
     for b in binds:
         keysym = b.get("keysym", "")
@@ -224,7 +223,6 @@ class BindingsPage(BasePage):
         self._viz: KeyboardVisualizer | None = None
 
     def build(self) -> Gtk.Widget:
-        # Create a custom ToolbarView layout to match "Workspace View" aesthetic
         tb = Adw.ToolbarView()
 
         # Custom Header
@@ -504,19 +502,19 @@ class BindingsPage(BasePage):
         keys_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         parts = keysym.split("+")
         _labels = {
-            "mod": "MOD",
-            "super": "SUP",
-            "ctrl": "CTL",
-            "control": "CTL",
-            "shift": "SHFT",
-            "alt": "ALT",
+            "mod": "Mod",
+            "super": "Super",
+            "ctrl": "Ctrl",
+            "control": "Ctrl",
+            "shift": "Shift",
+            "alt": "Alt",
         }
 
         for i, part in enumerate(parts):
             label_text = part
             is_mod = i < len(parts) - 1
             if is_mod:
-                label_text = _labels.get(part.lower(), part.upper()[:4])
+                label_text = _labels.get(part.lower(), part)
             else:
                 label_text = label_text.upper() if len(label_text) == 1 else label_text
 
@@ -541,7 +539,7 @@ class BindingsPage(BasePage):
         # 3. Action Name
         action_lbl = Gtk.Label(label=full_action)
         action_lbl.set_xalign(0.0)
-        action_lbl.set_ellipsize(3) # pango.EllipsizeMode.END
+        action_lbl.set_ellipsize(3)
         action_lbl.add_css_class("nm-binding-action-name")
         card.append(action_lbl)
 
@@ -652,12 +650,10 @@ class BindingsPage(BasePage):
         mod_box.set_valign(Gtk.Align.CENTER)
         mod_checks: dict[str, Gtk.CheckButton] = {}
         cur_keysym = bind["keysym"] if bind else ""
+        keysym_parts_lower = [p.lower() for p in cur_keysym.split("+")[:-1]]
         for mod in MODIFIERS:
             cb = Gtk.CheckButton(label=mod)
-            cb.set_active(
-                mod.lower() in cur_keysym.lower()
-                or ("mod" in cur_keysym.lower() and mod == "Super")
-            )
+            cb.set_active(mod.lower() in keysym_parts_lower)
             mod_box.append(cb)
             mod_checks[mod] = cb
         mod_row.add_suffix(mod_box)
@@ -712,10 +708,7 @@ class BindingsPage(BasePage):
             key = key_entry.get_text().strip()
             if not key:
                 return
-            mod_parts = []
-            for m in mods:
-                mod_parts.append("Mod" if m == "Super" else m)
-            keysym = "+".join(mod_parts + [key])
+            keysym = "+".join(mods + [key])
             action_idx = act_combo.get_selected()
             action = NIRI_ACTIONS[action_idx] if action_idx < len(NIRI_ACTIONS) else ""
             arg_text = arg_row.get_text().strip()
