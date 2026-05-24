@@ -9,17 +9,6 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-import math
-
-
-def _rounded_rect(cr, x, y, w, h, r):
-    cr.new_sub_path()
-    cr.arc(x + w - r, y + r, r, -math.pi / 2, 0)
-    cr.arc(x + w - r, y + h - r, r, 0, math.pi / 2)
-    cr.arc(x + r, y + h - r, r, math.pi / 2, math.pi)
-    cr.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
-    cr.close_path()
-
 
 from gi.repository import Adw, Gtk
 
@@ -54,6 +43,12 @@ class OutputsPage(BasePage):
 
     def build(self) -> Gtk.Widget:
         tb, header, scroll, content = self._make_toolbar_page("Outputs")
+
+        add_fake_btn = Gtk.Button(icon_name="list-add-symbolic")
+        add_fake_btn.set_tooltip_text("Add fake monitor for testing")
+        add_fake_btn.add_css_class("flat")
+        add_fake_btn.connect("clicked", lambda *_: self._add_fake_monitor())
+        header.pack_end(add_fake_btn)
 
         refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic")
         refresh_btn.set_tooltip_text("Reload outputs from niri")
@@ -109,6 +104,37 @@ class OutputsPage(BasePage):
 
         niri_ipc.get_outputs(_on_got_outputs)
 
+    def _add_fake_monitor(self):
+        idx = 1
+        while any(o.get("name") == f"fake-{idx}" for o in self._outputs):
+            idx += 1
+        name = f"fake-{idx}"
+
+        o = {
+            "name": name,
+            "modes": [{"width": 1920, "height": 1080, "refresh_rate": 60000}],
+            "current_mode": 0,
+            "logical": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080,
+                "scale": 1.0,
+                "transform": "normal",
+            },
+        }
+        self._outputs.append(o)
+
+        names = [out.get("name", "?") for out in self._outputs]
+        model = Gtk.StringList.new(names)
+        self._out_combo.set_model(model)
+        self._out_combo.set_selected(len(self._outputs) - 1)
+
+        if self._canvas:
+            self._canvas.queue_draw()
+        if hasattr(self._win, "_build_search_index"):
+            self._win._build_search_index()
+
     # Canvas drawing
 
     def _draw_canvas(self, area, cr, width, height):
@@ -141,17 +167,16 @@ class OutputsPage(BasePage):
             max_x = 1920
             max_y = 1080
 
-        bb_w = max_x - min_x
-        bb_h = max_y - min_y
+        total_w = max_x - min_x
+        total_h = max_y - min_y
 
-        scale = min(width / max(bb_w, 1), height / max(bb_h, 1)) * 0.85
-        off_x = (width - bb_w * scale) / 2 - min_x * scale
-        off_y = (height - bb_h * scale) / 2 - min_y * scale
+        scale = min(width / max(total_w, 1), height / max(total_h, 1)) * 0.9
+        off_x = (width - total_w * scale) / 2 - min_x * scale
+        off_y = (height - total_h * scale) / 2 - min_y * scale
 
         if self._drag_output and hasattr(self, "_drag_start_scale"):
             scale = self._drag_start_scale
-            off_x = self._drag_start_offset[0]
-            off_y = self._drag_start_offset[1]
+            off_x, off_y = self._drag_start_offset
 
         self._canvas_scale = scale
         self._canvas_offset = (off_x, off_y)
@@ -181,37 +206,20 @@ class OutputsPage(BasePage):
                 self._current_out.get("name") if self._current_out else None
             )
 
-            radius = min(w, h) * 0.05
-            radius = max(4, min(radius, 12))
-
-            cr.set_source_rgba(0, 0, 0, 0.25)
-            _rounded_rect(cr, x + 4, y + 6, w, h, radius)
-            cr.fill()
-
             if is_sel:
                 cr.set_source_rgba(155 / 255, 109 / 255, 1.0, 1.0)
             else:
-                cr.set_source_rgba(0.15, 0.15, 0.17, 1.0)
-            _rounded_rect(cr, x, y, w, h, radius)
-            cr.fill()
+                cr.set_source_rgba(0.2, 0.2, 0.2, 1.0)
+            cr.rectangle(x, y, w, h)
+            cr.fill_preserve()
 
-            bezel = max(1, min(w, h) * 0.01)
-            cr.set_source_rgba(0.1, 0.1, 0.12, 1.0)
-            _rounded_rect(
-                cr, x + bezel, y + bezel, w - bezel * 2, h - bezel * 2, radius * 0.8
-            )
-            cr.fill()
-
-            cr.set_source_rgba(1, 1, 1, 0.04)
-            _rounded_rect(
-                cr,
-                x + bezel,
-                y + bezel,
-                w - bezel * 2,
-                (h - bezel * 2) * 0.4,
-                radius * 0.8,
-            )
-            cr.fill()
+            # border
+            cr.set_line_width(1.5)
+            if is_sel:
+                cr.set_source_rgba(0.7, 0.7, 0.75, 0.9)
+            else:
+                cr.set_source_rgba(0.4, 0.4, 0.45, 0.6)
+            cr.stroke()
 
             name = o.get("name", f"Output {i}")
             mode_idx = o.get("current_mode")
@@ -284,8 +292,8 @@ class OutputsPage(BasePage):
         self._drag_current_lx += delta_dx / scale
         self._drag_current_ly += delta_dy / scale
 
-        new_lx = round(self._drag_current_lx / 10) * 10
-        new_ly = round(self._drag_current_ly / 10) * 10
+        new_lx = self._drag_current_lx
+        new_ly = self._drag_current_ly
 
         drag_o = next(
             (o for o in self._outputs if o.get("name") == self._drag_output), None
@@ -293,114 +301,81 @@ class OutputsPage(BasePage):
         if not drag_o:
             return
 
-        drag_w = drag_o.get("logical", {}).get("width", 1920)
-        drag_h = drag_o.get("logical", {}).get("height", 1080)
-
-        drag_scale_u = drag_o.get("logical", {}).get("scale", 1.0)
-        mode_idx_u = drag_o.get("current_mode")
-        modes_u = drag_o.get("modes", [])
-        m_u = (
-            modes_u[mode_idx_u]
-            if isinstance(mode_idx_u, int) and 0 <= mode_idx_u < len(modes_u)
+        monitor_scale = drag_o.get("logical", {}).get("scale", 1.0)
+        mode_idx = drag_o.get("current_mode")
+        modes = drag_o.get("modes", [])
+        mode = (
+            modes[mode_idx]
+            if isinstance(mode_idx, int) and 0 <= mode_idx < len(modes)
             else {}
         )
-        pw_u = m_u.get("width", 1920)
-        ph_u = m_u.get("height", 1080)
-        t_u = drag_o.get("logical", {}).get("transform", "normal")
-        t_str_u = str(t_u).lower().replace("_", "-")
-        if t_str_u in ["90", "270", "flipped-90", "flipped-270"]:
-            pw_u, ph_u = ph_u, pw_u
+        pixel_w = mode.get("width", 1920)
+        pixel_h = mode.get("height", 1080)
 
-        exact_drag_w = pw_u / drag_scale_u
-        exact_drag_h = ph_u / drag_scale_u
+        transform = str(drag_o.get("logical", {}).get("transform", "normal")).lower().replace("_", "-")
+        if transform in ["90", "270", "flipped-90", "flipped-270"]:
+            pixel_w, pixel_h = pixel_h, pixel_w
 
-        max_allowed_x = 32768
-        max_allowed_y = 32768
+        logical_w = pixel_w / monitor_scale
+        logical_h = pixel_h / monitor_scale
 
-        new_lx = min(max_allowed_x - drag_w, new_lx)
-        new_ly = min(max_allowed_y - drag_h, new_ly)
-        snap_dist = 40 / scale
+        # edge snapping
+        SNAP_THRESHOLD = 30
+        snapped_x = new_lx
+        snapped_y = new_ly
+        closest_x = SNAP_THRESHOLD + 1
+        closest_y = SNAP_THRESHOLD + 1
 
-        import math
+        dragged_left   = new_lx
+        dragged_right  = new_lx + logical_w
+        dragged_top    = new_ly
+        dragged_bottom = new_ly + logical_h
 
-        # Snapping to edges
-        for o in self._outputs:
-            if o.get("name") == self._drag_output:
+        for other in self._outputs:
+            if other.get("name") == self._drag_output:
                 continue
-            ox2 = o.get("logical", {}).get("x", 0)
-            oy2 = o.get("logical", {}).get("y", 0)
 
-            # Use exact fractional dimensions to prevent Niri overlap rejection
-            scale2 = o.get("logical", {}).get("scale", 1.0)
-            mode_idx = o.get("current_mode")
-            modes = o.get("modes", [])
-            m = (
-                modes[mode_idx]
-                if isinstance(mode_idx, int) and 0 <= mode_idx < len(modes)
-                else {}
-            )
-            pw2 = m.get("width", 1920)
-            ph2 = m.get("height", 1080)
+            other_pos = other.get("logical", {})
+            other_x = other_pos.get("x", 0)
+            other_y = other_pos.get("y", 0)
 
-            t2 = o.get("logical", {}).get("transform", "normal")
-            t_str2 = str(t2).lower().replace("_", "-")
-            if t_str2 in ["90", "270", "flipped-90", "flipped-270"]:
-                pw2, ph2 = ph2, pw2
+            other_scale = other_pos.get("scale", 1.0)
+            other_mode_idx = other.get("current_mode")
+            other_modes = other.get("modes", [])
+            other_mode = other_modes[other_mode_idx] if isinstance(other_mode_idx, int) and 0 <= other_mode_idx < len(other_modes) else {}
+            other_pixel_w = other_mode.get("width", 1920)
+            other_pixel_h = other_mode.get("height", 1080)
 
-            exact_w = pw2 / scale2
-            exact_h = ph2 / scale2
+            other_transform = str(other_pos.get("transform", "normal")).lower().replace("_", "-")
+            if other_transform in ["90", "270", "flipped-90", "flipped-270"]:
+                other_pixel_w, other_pixel_h = other_pixel_h, other_pixel_w
 
-            ow2 = o.get("logical", {}).get("width", math.ceil(exact_w))
-            oh2 = o.get("logical", {}).get("height", math.ceil(exact_h))
+            other_logical_w = other_pixel_w / other_scale
+            other_logical_h = other_pixel_h / other_scale
 
-            y_overlaps = not (
-                new_ly + drag_h < oy2 - snap_dist or oy2 + oh2 + snap_dist < new_ly
-            )
-            x_overlaps = not (
-                new_lx + drag_w < ox2 - snap_dist or ox2 + ow2 + snap_dist < new_lx
-            )
+            other_left   = other_x
+            other_right  = other_x + other_logical_w
+            other_top    = other_y
+            other_bottom = other_y + other_logical_h
 
-            best_x_dist = float("inf")
-            best_y_dist = float("inf")
+            for dragged_edge, is_left_edge in [(dragged_left, True), (dragged_right, False)]:
+                for other_edge in [other_left, other_right]:
+                    dist = abs(dragged_edge - other_edge)
+                    if dist < closest_x:
+                        closest_x = dist
+                        snapped_x = other_edge if is_left_edge else other_edge - logical_w
 
-            if y_overlaps:
-                best_x_dist = min(
-                    abs((new_lx + drag_w) - ox2),
-                    abs(new_lx - (ox2 + exact_w)),
-                    abs(new_lx - ox2),
-                    abs((new_lx + drag_w) - (ox2 + exact_w)),
-                )
+            for dragged_edge, is_top_edge in [(dragged_top, True), (dragged_bottom, False)]:
+                for other_edge in [other_top, other_bottom]:
+                    dist = abs(dragged_edge - other_edge)
+                    if dist < closest_y:
+                        closest_y = dist
+                        snapped_y = other_edge if is_top_edge else other_edge - logical_h
 
-            if x_overlaps:
-                best_y_dist = min(
-                    abs((new_ly + drag_h) - oy2),
-                    abs(new_ly - (oy2 + exact_h)),
-                    abs(new_ly - oy2),
-                    abs((new_ly + drag_h) - (oy2 + exact_h)),
-                )
-
-            do_x_snap = y_overlaps and (best_x_dist <= best_y_dist or not x_overlaps)
-            do_y_snap = x_overlaps and (best_y_dist < best_x_dist or not y_overlaps)
-
-            if do_x_snap:
-                if abs((new_lx + drag_w) - ox2) < snap_dist:
-                    new_lx = math.floor(ox2 - exact_drag_w)
-                elif abs(new_lx - (ox2 + exact_w)) < snap_dist:
-                    new_lx = math.ceil(ox2 + exact_w)
-                elif abs(new_lx - ox2) < snap_dist:
-                    new_lx = ox2
-                elif abs((new_lx + drag_w) - (ox2 + exact_w)) < snap_dist:
-                    new_lx = math.ceil(ox2 + exact_w) - math.ceil(exact_drag_w)
-
-            if do_y_snap:
-                if abs((new_ly + drag_h) - oy2) < snap_dist:
-                    new_ly = math.floor(oy2 - exact_drag_h)
-                elif abs(new_ly - (oy2 + exact_h)) < snap_dist:
-                    new_ly = math.ceil(oy2 + exact_h)
-                elif abs(new_ly - oy2) < snap_dist:
-                    new_ly = oy2
-                elif abs((new_ly + drag_h) - (oy2 + exact_h)) < snap_dist:
-                    new_ly = math.ceil(oy2 + exact_h) - math.ceil(exact_drag_h)
+        if closest_x <= SNAP_THRESHOLD:
+            new_lx = snapped_x
+        if closest_y <= SNAP_THRESHOLD:
+            new_ly = snapped_y
 
         if "logical" not in drag_o:
             drag_o["logical"] = {}
@@ -412,20 +387,6 @@ class OutputsPage(BasePage):
 
     def _on_drag_end(self, gesture, dx, dy):
         if self._drag_output:
-            min_x = min(
-                (o.get("logical", {}).get("x", 0) for o in self._outputs), default=0
-            )
-            min_y = min(
-                (o.get("logical", {}).get("y", 0) for o in self._outputs), default=0
-            )
-
-            if min_x != 0 or min_y != 0:
-                for o in self._outputs:
-                    if "logical" not in o:
-                        o["logical"] = {}
-                    o["logical"]["x"] = o["logical"].get("x", 0) - min_x
-                    o["logical"]["y"] = o["logical"].get("y", 0) - min_y
-
             if self._canvas:
                 self._canvas.queue_draw()
 
@@ -465,19 +426,22 @@ class OutputsPage(BasePage):
             return
         pos = o.get("logical", {})
 
+        nx = pos.get("x", 0)
+        ny = pos.get("y", 0)
+
         out_node = self._get_or_create_out_node(name)
         pos_node = out_node.get_child("position")
         if pos_node is None:
             pos_node = KdlNode(name="position")
             out_node.children.append(pos_node)
-        pos_node.props["x"] = int(round(pos.get("x", 0)))
-        pos_node.props["y"] = int(round(pos.get("y", 0)))
+        pos_node.props["x"] = int(round(nx))
+        pos_node.props["y"] = int(round(ny))
 
         if self._current_out and self._current_out.get("name") == name:
             if hasattr(self, "_pos_x_adj"):
-                self._pos_x_adj.set_value(pos.get("x", 0))
+                self._pos_x_adj.set_value(nx)
             if hasattr(self, "_pos_y_adj"):
-                self._pos_y_adj.set_value(pos.get("y", 0))
+                self._pos_y_adj.set_value(ny)
 
         self._commit("output position")
 
@@ -526,8 +490,8 @@ class OutputsPage(BasePage):
         scale_val = round(output.get("logical", {}).get("scale", 1.0), 3)
         scale_adj = Gtk.Adjustment(
             value=scale_val,
-            lower=0.25,
-            upper=4.0,
+            lower=0.01,
+            upper=100.0,
             step_increment=0.05,
         )
         scale_row = Adw.SpinRow(title="Scale", adjustment=scale_adj, digits=2)
@@ -551,8 +515,8 @@ class OutputsPage(BasePage):
 
         px = output.get("logical", {}).get("x", 0)
         py = output.get("logical", {}).get("y", 0)
-        px_adj = Gtk.Adjustment(value=px, lower=0, upper=32768, step_increment=1)
-        py_adj = Gtk.Adjustment(value=py, lower=0, upper=32768, step_increment=1)
+        px_adj = Gtk.Adjustment(value=px, lower=-1000000, upper=1000000, step_increment=1)
+        py_adj = Gtk.Adjustment(value=py, lower=-1000000, upper=1000000, step_increment=1)
         self._pos_x_adj = px_adj
         self._pos_y_adj = py_adj
         pos_x_row = Adw.SpinRow(title="Position X", adjustment=px_adj, digits=0)
