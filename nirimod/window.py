@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import shutil
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -10,10 +12,10 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango
 
+from nirimod import kdl_parser
 from nirimod import niri_ipc
-from nirimod.kdl_parser import BACKUP_DIR, NIRI_CONFIG
-from nirimod.state import AppState
 from nirimod import profiles as prof_mod
+from nirimod.state import AppState
 from nirimod.theme import CSS
 
 # Grouped sidebar structure: (section_title, [(page_id, icon, label), ...])
@@ -558,6 +560,12 @@ class NiriModWindow(Adw.ApplicationWindow):
             self._build_search_index()
 
     def _on_save(self):
+        from nirimod import app_settings
+        if app_settings.get("auto_backup", True):
+            from nirimod.backup import backup_all_sources
+            limit = app_settings.get("backup_limit", 10)
+            backup_all_sources(self.app_state.source_files, limit=limit)
+
         new_kdl = self.app_state.write_current_kdl()
 
         def _finish_save(reload_result):
@@ -596,7 +604,7 @@ class NiriModWindow(Adw.ApplicationWindow):
                 lambda: niri_ipc.validate_config(), _on_validated
             )
         else:
-            tmp_kdl = NIRI_CONFIG.with_name(".config.kdl.tmp")
+            tmp_kdl = kdl_parser.NIRI_CONFIG.with_name(".config.kdl.tmp")
             self.app_state.write_to_path(tmp_kdl)
 
             def _on_validated(result):
@@ -605,7 +613,7 @@ class NiriModWindow(Adw.ApplicationWindow):
                     self.show_toast(f"Validation error: {msg}", timeout=8)
                     tmp_kdl.unlink(missing_ok=True)
                     return
-                shutil.move(tmp_kdl, NIRI_CONFIG)
+                shutil.move(tmp_kdl, kdl_parser.NIRI_CONFIG)
                 niri_ipc.run_in_thread(niri_ipc.load_config_file, _finish_save)
 
             niri_ipc.run_in_thread(
@@ -677,16 +685,23 @@ class NiriModWindow(Adw.ApplicationWindow):
 
         self._toast_overlay.add_toast(toast)
 
+    def _get_baseline_dir(self):
+        from pathlib import Path
+        path_str = str(kdl_parser.NIRI_CONFIG.resolve())
+        path_hash = hashlib.md5(path_str.encode()).hexdigest()[:8]
+        return Path.home() / ".config" / "nirimod" / "baseline" / f"{kdl_parser.NIRI_CONFIG.name}_{path_hash}"
+
     def _check_onboarding(self):
-        sentinel = BACKUP_DIR / "config.kdl"
+        baseline_dir = self._get_baseline_dir()
+        sentinel = baseline_dir / kdl_parser.NIRI_CONFIG.name
         if sentinel.exists():
             return
 
         source_files = sorted(self.app_state.source_files)
         filenames = "\n".join(f"  • <tt>{p.name}</tt>" for p in source_files)
         body = (
-            f"NiriMod will back up your config files to\n"
-            f"<tt>{BACKUP_DIR}</tt>:\n\n"
+            f"NiriMod will back up your original config files to\n"
+            f"<tt>{baseline_dir}</tt>:\n\n"
             f"{filenames}\n"
         )
 
@@ -702,7 +717,7 @@ class NiriModWindow(Adw.ApplicationWindow):
     def _check_kofi(self):
         from nirimod import app_settings
 
-        if app_settings.get("kofi_v2_dont_show", False):
+        if app_settings.get("kofi_v3_dont_show", False):
             return
         self._show_kofi_dialog()
 
@@ -723,13 +738,13 @@ class NiriModWindow(Adw.ApplicationWindow):
         dialog.set_default_response("kofi")
 
         dont_show_check = Gtk.CheckButton(label="Don't show this again on startup")
-        dont_show_check.set_active(app_settings.get("kofi_v2_dont_show", False))
+        dont_show_check.set_active(app_settings.get("kofi_v3_dont_show", False))
         dont_show_check.set_halign(Gtk.Align.CENTER)
         dont_show_check.set_margin_top(4)
         dialog.set_extra_child(dont_show_check)
 
         def _on_kofi_response(dlg, response):
-            app_settings.set("kofi_v2_dont_show", dont_show_check.get_active())
+            app_settings.set("kofi_v3_dont_show", dont_show_check.get_active())
             if response == "kofi":
                 Gio.AppInfo.launch_default_for_uri("https://ko-fi.com/srinivasr", None)
 
@@ -767,58 +782,90 @@ class NiriModWindow(Adw.ApplicationWindow):
     def _on_onboarding_response(self, dialog, response):
         if response != "accept":
             return
+        baseline_dir = self._get_baseline_dir()
         try:
-            BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+            baseline_dir.mkdir(parents=True, exist_ok=True)
             for p in self.app_state.source_files:
                 if p.exists():
                     try:
-                        rel = p.relative_to(NIRI_CONFIG.parent)
-                        dest = BACKUP_DIR / rel
+                        rel = p.relative_to(kdl_parser.NIRI_CONFIG.parent)
+                        dest = baseline_dir / rel
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(p, dest)
                     except ValueError:
-
-                        shutil.copy2(p, BACKUP_DIR / p.name)
-            self.show_toast(f"Backup created in {BACKUP_DIR} ✓")
+                        shutil.copy2(p, baseline_dir / p.name)
+            self.show_toast("Baseline backup created ✓")
         except Exception as e:
             self.show_toast(f"Backup failed: {e}", timeout=6)
 
     def _on_reset_config_clicked(self, _btn=None):
-        if not BACKUP_DIR.exists():
-            self.show_toast("No backup to restore from.")
+        baseline_dir = self._get_baseline_dir()
+
+        backups = []
+        if kdl_parser.BACKUP_DIR.exists():
+            for p in kdl_parser.BACKUP_DIR.iterdir():
+                if p.is_dir():
+                    backups.append((p.stat().st_mtime, p, p.name))
+        
+        backups.sort(key=lambda x: x[0], reverse=True)
+        
+        if baseline_dir.exists():
+            backups.append((baseline_dir.stat().st_mtime, baseline_dir, "Original Baseline"))
+            
+        if not backups:
+            self.show_toast("No backups available to restore.")
             return
 
+        prefs_win = Adw.PreferencesWindow()
+        prefs_win.set_title("Restore Backup")
+        prefs_win.set_modal(True)
+        prefs_win.set_transient_for(self)
+        prefs_win.set_default_size(500, 400)
+
+        page = Adw.PreferencesPage()
+        grp = Adw.PreferencesGroup(
+            title="Available Backups",
+            description="Select a backup to restore your configuration from."
+        )
+
+        for _, path, name in backups:
+            row = Adw.ActionRow(title=name)
+            if name == "Original Baseline":
+                row.set_subtitle("Taken on first launch")
+                
+            restore_btn = Gtk.Button(label="Restore")
+            restore_btn.set_valign(Gtk.Align.CENTER)
+            restore_btn.add_css_class("flat")
+            restore_btn.add_css_class("suggested-action")
+            restore_btn.connect("clicked", lambda _b, p=path: self._confirm_restore(p, prefs_win))
+            row.add_suffix(restore_btn)
+            grp.add(row)
+            
+        page.add(grp)
+        prefs_win.add(page)
+        prefs_win.present()
+
+    def _confirm_restore(self, backup_dir, parent_dialog):
+        parent_dialog.close()
         dialog = Adw.AlertDialog(
-            heading="Reset to backup?",
-            body="Your current config will be replaced with the original backup and the backup folder will be deleted. This can't be undone."
+            heading="Confirm Restore",
+            body="Your current configuration will be replaced by this backup. You may want to manually save your current work first."
         )
         dialog.add_response("cancel", "Cancel")
-        dialog.add_response("reset", "Reset")
-        dialog.set_response_appearance("reset", Adw.ResponseAppearance.DESTRUCTIVE)
-        dialog.connect("response", lambda dlg, r: self._perform_reset_to_backup() if r == "reset" else None)
+        dialog.add_response("restore", "Restore")
+        dialog.set_response_appearance("restore", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.connect("response", lambda dlg, r: self._perform_restore(backup_dir) if r == "restore" else None)
         dialog.present(self)
 
-    def _perform_reset_to_backup(self):
+    def _perform_restore(self, backup_dir):
         try:
-            def _restore(src_dir, dest_dir):
-                for f in src_dir.iterdir():
-                    if f.is_file():
-                        rel = f.relative_to(BACKUP_DIR)
-                        target = dest_dir / rel
-                        target.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(f, target)
-                    elif f.is_dir():
-                        _restore(f, dest_dir)
-
-            _restore(BACKUP_DIR, NIRI_CONFIG.parent)
-            shutil.rmtree(BACKUP_DIR)
+            shutil.copytree(backup_dir, kdl_parser.NIRI_CONFIG.parent, dirs_exist_ok=True)
             self.app_state.reload_from_disk()
             self.notify_nodes_changed()
             self.mark_clean()
-            self.show_toast("Config reset to backup ✓")
-            self._check_onboarding()
+            self.show_toast("Config restored from backup ✓")
         except Exception as e:
-            self.show_toast(f"Reset failed: {e}", timeout=6)
+            self.show_toast(f"Restore failed: {e}", timeout=6)
 
     def _open_preferences(self):
         from nirimod import app_settings
@@ -849,8 +896,141 @@ class NiriModWindow(Adw.ApplicationWindow):
         )
         updates_grp.add(auto_update_row)
         page.add(updates_grp)
+
+        config_grp = Adw.PreferencesGroup(
+            title="Configuration File",
+            description="Manage Niri configuration paths and backups",
+        )
+
+        config_path_row = Adw.ActionRow(title="Config Path")
+        current_path = app_settings.get("config_path", "")
+        config_path_row.set_subtitle(current_path if current_path else "Default (~/.config/niri/config.kdl)")
+        
+        browse_btn = Gtk.Button(label="Browse...")
+        browse_btn.set_valign(Gtk.Align.CENTER)
+        browse_btn.connect("clicked", lambda _b: self._on_browse_config(prefs_win, config_path_row))
+        config_path_row.add_suffix(browse_btn)
+
+        clear_btn = Gtk.Button(icon_name="edit-clear-symbolic")
+        clear_btn.set_valign(Gtk.Align.CENTER)
+        clear_btn.set_tooltip_text("Reset to default")
+        clear_btn.connect("clicked", lambda _b: self._on_clear_config(config_path_row))
+        config_path_row.add_suffix(clear_btn)
+
+        config_grp.add(config_path_row)
+
+        backup_path_row = Adw.ActionRow(title="Backup Directory")
+        current_backup = app_settings.get("backup_path", "")
+        backup_path_row.set_subtitle(current_backup if current_backup else "Default (~/.config/nirimod/backups)")
+        
+        browse_backup_btn = Gtk.Button(label="Browse...")
+        browse_backup_btn.set_valign(Gtk.Align.CENTER)
+        browse_backup_btn.connect("clicked", lambda _b: self._on_browse_backup_dir(prefs_win, backup_path_row))
+        backup_path_row.add_suffix(browse_backup_btn)
+
+        clear_backup_btn = Gtk.Button(icon_name="edit-clear-symbolic")
+        clear_backup_btn.set_valign(Gtk.Align.CENTER)
+        clear_backup_btn.set_tooltip_text("Reset to default")
+        clear_backup_btn.connect("clicked", lambda _b: self._on_clear_backup_dir(backup_path_row))
+        backup_path_row.add_suffix(clear_backup_btn)
+
+        config_grp.add(backup_path_row)
+
+        auto_backup_row = Adw.SwitchRow(
+            title="Automatic Backups",
+            subtitle="Create a timestamped backup before saving",
+        )
+        auto_backup_row.set_active(app_settings.get("auto_backup", True))
+        auto_backup_row.connect(
+            "notify::active",
+            lambda row, _: app_settings.set("auto_backup", row.get_active()),
+        )
+        config_grp.add(auto_backup_row)
+
+        backup_limit_row = Adw.SpinRow(
+            title="Backup Limit",
+            subtitle="Maximum number of backups to keep per file (0 = unlimited)",
+            digits=0,
+        )
+        backup_limit_row.set_adjustment(Gtk.Adjustment(value=app_settings.get("backup_limit", 10), lower=0, upper=1000, step_increment=1))
+        backup_limit_row.connect(
+            "notify::value",
+            lambda row, _: app_settings.set("backup_limit", int(row.get_value())),
+        )
+        
+        def _on_auto_backup_changed(switch_row, _param):
+            backup_limit_row.set_sensitive(switch_row.get_active())
+            
+        auto_backup_row.connect("notify::active", _on_auto_backup_changed)
+        backup_limit_row.set_sensitive(auto_backup_row.get_active())
+
+        config_grp.add(backup_limit_row)
+        page.add(config_grp)
+
         prefs_win.add(page)
         prefs_win.present()
+
+    def _on_browse_config(self, parent_win, row):
+        from nirimod import app_settings
+        dialog = Gtk.FileDialog()
+        dialog.set_title("Select Niri Config")
+        f = Gtk.FileFilter()
+        f.set_name("KDL files")
+        f.add_pattern("*.kdl")
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(f)
+        dialog.set_filters(filters)
+
+        def _on_response(dialog, result):
+            try:
+                f = dialog.open_finish(result)
+                if f:
+                    path = f.get_path()
+                    app_settings.set("config_path", path)
+                    row.set_subtitle(path)
+                    self.show_toast("Restart NiriMod to use the new config path.", timeout=5)
+            except GLib.Error:
+                pass
+
+        dialog.open(parent_win, None, _on_response)
+        
+    def _on_browse_backup_dir(self, parent_win, row):
+        from nirimod import app_settings
+        dialog = Gtk.FileDialog()
+        dialog.set_title("Select Backup Directory")
+        
+        def _on_response(dialog, result):
+            try:
+                f = dialog.select_folder_finish(result)
+                if f:
+                    path = f.get_path()
+                    app_settings.set("backup_path", path)
+                    row.set_subtitle(path)
+                    kdl_parser.set_paths(
+                        config_path=app_settings.get("config_path", ""),
+                        backup_path=path
+                    )
+                    self.show_toast("Backup directory updated.", timeout=3)
+            except GLib.Error:
+                pass
+
+        dialog.select_folder(parent_win, None, _on_response)
+
+    def _on_clear_backup_dir(self, row):
+        from nirimod import app_settings
+        app_settings.set("backup_path", "")
+        row.set_subtitle("Default (~/.config/nirimod/backups)")
+        kdl_parser.set_paths(
+            config_path=app_settings.get("config_path", ""),
+            backup_path=""
+        )
+        self.show_toast("Backup directory reset to default.", timeout=3)
+
+    def _on_clear_config(self, row):
+        from nirimod import app_settings
+        app_settings.set("config_path", "")
+        row.set_subtitle("Default (~/.config/niri/config.kdl)")
+        self.show_toast("Restart NiriMod to use the default config path.", timeout=5)
 
     def _on_profiles_clicked(self, _btn=None):
         dialog = Adw.AlertDialog(heading="Profiles")

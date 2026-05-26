@@ -9,6 +9,10 @@ _SETTINGS_FILE = _SETTINGS_DIR / "settings.json"
 
 _DEFAULTS: dict = {
     "auto_update": True,
+    "config_path": "",
+    "backup_path": "",
+    "auto_backup": True,
+    "backup_limit": 10,
 }
 
 _cache: dict | None = None

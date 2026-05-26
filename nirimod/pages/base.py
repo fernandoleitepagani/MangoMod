@@ -29,7 +29,7 @@ def make_toolbar_page(
         menu = Gio.Menu()
         menu.append("Profiles", "win.open_profiles")
         menu.append("Preferences", "win.open_preferences")
-        menu.append("Reset to Original Backup", "win.reset_config")
+        menu.append("Restore Backup...", "win.reset_config")
 
         kofi_section = Gio.Menu()
         kofi_section.append("Support on Ko-fi ☕", "win.open_kofi")

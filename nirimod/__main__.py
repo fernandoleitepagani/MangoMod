@@ -61,6 +61,12 @@ class NiriModApp(Adw.Application):
     def do_activate(self):
         win = self.get_active_window()
         if win is None:
+            from nirimod import app_settings
+            from nirimod.kdl_parser import set_paths
+            set_paths(
+                config_path=app_settings.get("config_path", ""),
+                backup_path=app_settings.get("backup_path", "")
+            )
             win = NiriModWindow(application=self)
         win.present()
 

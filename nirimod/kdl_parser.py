@@ -18,7 +18,26 @@ _config_dir = Path(
 )
 NIRI_CONFIG  = _config_dir / "config.kdl"
 PROFILES_DIR = _config_dir / "profiles"
-BACKUP_DIR   = _config_dir / "backup"
+BACKUP_DIR   = Path.home() / ".config" / "nirimod" / "backups"
+
+def set_paths(config_path: str | Path | None = None, backup_path: str | Path | None = None) -> None:
+    """Override the default config and/or backup paths at module level."""
+    global NIRI_CONFIG, PROFILES_DIR, BACKUP_DIR, _config_dir
+    if config_path:
+        p = Path(config_path).expanduser().resolve()
+        _config_dir = p.parent
+        NIRI_CONFIG = p
+    else:
+        _config_dir = Path(
+            os.environ.get("NIRIMOD_CONFIG_DIR", Path.home() / ".config" / "niri")
+        )
+        NIRI_CONFIG = _config_dir / "config.kdl"
+    PROFILES_DIR = _config_dir / "profiles"
+    
+    if backup_path:
+        BACKUP_DIR = Path(backup_path).expanduser().resolve()
+    else:
+        BACKUP_DIR = Path.home() / ".config" / "nirimod" / "backups"
 
 
 class KdlRawString(str):
