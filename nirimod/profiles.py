@@ -33,12 +33,15 @@ def save_profile(name: str, source_files: set[Path] | None = None) -> None:
                     shutil.copy2(p, dest_dir / p.name)
     else:
         if kdl_parser.NIRI_CONFIG.exists():
-            shutil.copy2(kdl_parser.NIRI_CONFIG, kdl_parser.PROFILES_DIR / f"{name}.kdl")
+            shutil.copy2(
+                kdl_parser.NIRI_CONFIG, kdl_parser.PROFILES_DIR / f"{name}.kdl"
+            )
 
 
 def load_profile(name: str) -> bool:
     dir_profile = kdl_parser.PROFILES_DIR / name
     if dir_profile.is_dir():
+
         def _restore(src_dir, dest_dir):
             for f in src_dir.iterdir():
                 if f.is_file():
@@ -48,7 +51,7 @@ def load_profile(name: str) -> bool:
                     shutil.copy2(f, target)
                 elif f.is_dir():
                     _restore(f, dest_dir)
-                    
+
         _restore(dir_profile, kdl_parser.NIRI_CONFIG.parent)
         return True
 
@@ -69,4 +72,3 @@ def delete_profile(name: str) -> bool:
         p.unlink()
         return True
     return False
-

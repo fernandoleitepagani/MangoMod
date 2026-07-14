@@ -7,6 +7,7 @@ from pathlib import Path
 
 from nirimod import kdl_parser
 
+
 def backup_all_sources(source_files: set[Path], limit: int = 10) -> Path | None:
     if not source_files:
         return None
@@ -37,7 +38,10 @@ def backup_all_sources(source_files: set[Path], limit: int = 10) -> Path | None:
             shutil.copy2(src, dest_dir / src.name)
 
     if limit > 0:
-        backups = sorted([p for p in kdl_parser.BACKUP_DIR.iterdir() if p.is_dir()], key=lambda p: p.stat().st_mtime)
+        backups = sorted(
+            [p for p in kdl_parser.BACKUP_DIR.iterdir() if p.is_dir()],
+            key=lambda p: p.stat().st_mtime,
+        )
         while len(backups) > limit:
             oldest = backups.pop(0)
             shutil.rmtree(oldest)

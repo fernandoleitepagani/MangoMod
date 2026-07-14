@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -23,13 +21,11 @@ if TYPE_CHECKING:
 
 @dataclass
 class RuntimeInfo:
-
     niri_running: bool = False
     has_touchpad: bool = False
 
 
 class AppState:
-
     def __init__(self) -> None:
         self._nodes: list[KdlNode] = []
         self._saved_kdl: str = ""
