@@ -22,7 +22,7 @@ nirimod = "nirimod.__main__:main"
 [tool.hatch.build.targets.wheel]
 packages = ["nirimod"]
 
-[tool.ruff]
+[tool.ruff.lint]
 ignore = ["E402"]
 
 [tool.uv]
@@ -31,4 +31,9 @@ python-preference = "system"
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "ruff",
+    "mypy<1.15",
 ]
+
+[tool.mypy]
+ignore_missing_imports = true

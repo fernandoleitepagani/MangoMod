@@ -31,5 +31,16 @@
           program = "${self.packages.${system}.default}/bin/nirimod";
         };
       });
+
+      devShells = forAllSystems (system: let
+        pkgs = nixpkgs.legacyPackages.${system};
+      in {
+        default = pkgs.mkShell {
+          inputsFrom = [ self.packages.${system}.default ];
+          packages = with pkgs; [
+            uv
+          ];
+        };
+      });
     };
 }
