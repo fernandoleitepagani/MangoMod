@@ -17,11 +17,14 @@ from typing import Any
 _config_dir = Path(
     os.environ.get("NIRIMOD_CONFIG_DIR", Path.home() / ".config" / "niri")
 )
-NIRI_CONFIG  = _config_dir / "config.kdl"
+NIRI_CONFIG = _config_dir / "config.kdl"
 PROFILES_DIR = _config_dir / "profiles"
-BACKUP_DIR   = Path.home() / ".config" / "nirimod" / "backups"
+BACKUP_DIR = Path.home() / ".config" / "nirimod" / "backups"
 
-def set_paths(config_path: str | Path | None = None, backup_path: str | Path | None = None) -> None:
+
+def set_paths(
+    config_path: str | Path | None = None, backup_path: str | Path | None = None
+) -> None:
     """Override the default config and/or backup paths at module level."""
     global NIRI_CONFIG, PROFILES_DIR, BACKUP_DIR, _config_dir
     if config_path:
@@ -34,7 +37,7 @@ def set_paths(config_path: str | Path | None = None, backup_path: str | Path | N
         )
         NIRI_CONFIG = _config_dir / "config.kdl"
     PROFILES_DIR = _config_dir / "profiles"
-    
+
     if backup_path:
         BACKUP_DIR = Path(backup_path).expanduser().resolve()
     else:
@@ -60,6 +63,7 @@ class KdlNode:
     _removed_children: dict[str, tuple[int, "KdlNode"]] = field(
         default_factory=dict, compare=False, repr=False
     )
+    _primary_order: int = field(default=0, compare=False, repr=False)
 
     def get_child(self, name: str) -> "KdlNode | None":
         for c in reversed(self.children):
@@ -444,7 +448,7 @@ def _resolve_includes(
         if node.name != "include" or depth > 5:
             node.source_file = base
             if depth == 0:
-                node._primary_order = i  
+                node._primary_order = i
             flat.append(node)
             continue
 
@@ -452,13 +456,13 @@ def _resolve_includes(
         if not node.args:
             node.source_file = base
             if depth == 0:
-                node._primary_order = i  
+                node._primary_order = i
             flat.append(node)
             continue
 
         node.source_file = base
         if depth == 0:
-            node._primary_order = i  
+            node._primary_order = i
         target = base.parent / node.args[0]
         slots.append((node, target))
 
@@ -507,7 +511,7 @@ def _atomic_write(path: Path, content: str) -> None:
         os.close(fd)
         fd = -1
         os.replace(tmp, target)
-    except Exception:
+    except BaseException:
         if fd != -1:
             os.close(fd)
         try:
@@ -742,6 +746,8 @@ def find_or_create(nodes: list[KdlNode], *path: str) -> KdlNode:
     """Navigate/create nested nodes by path, operating on a list of nodes."""
     current_list = nodes
     node: KdlNode | None = None
+    if not path:
+        raise ValueError("path cannot be empty")
     for name in path:
         node = next((n for n in reversed(current_list) if n.name == name), None)
         if node is None:
@@ -749,6 +755,7 @@ def find_or_create(nodes: list[KdlNode], *path: str) -> KdlNode:
             node.leading_trivia = "\n"
             current_list.append(node)
         current_list = node.children
+    assert node is not None
     return node
 
 

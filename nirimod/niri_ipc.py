@@ -6,8 +6,6 @@ import json
 from typing import Callable
 
 
-
-
 # Internal: synchronous helper
 
 
@@ -36,6 +34,7 @@ def _run_async(
     callback: Callable[[str, str, int], None],
 ) -> None:
     import gi
+
     gi.require_version("Gio", "2.0")
     gi.require_version("GLib", "2.0")
     from gi.repository import Gio, GLib
@@ -46,14 +45,27 @@ def _run_async(
             Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
         )
     except GLib.Error:
-        GLib.idle_add(lambda: callback("", "niri: command not found", 1) or False)
+
+        def _err_fallback() -> bool:
+            callback("", "niri: command not found", 1)
+            return False
+
+        GLib.idle_add(_err_fallback)
         return
 
     def _on_done(source: Gio.Subprocess, result: Gio.AsyncResult) -> None:
         try:
             ok, stdout_bytes, stderr_bytes = source.communicate_finish(result)
-            stdout = stdout_bytes.get_data().decode("utf-8", errors="replace") if stdout_bytes else ""
-            stderr = stderr_bytes.get_data().decode("utf-8", errors="replace") if stderr_bytes else ""
+            stdout = (
+                stdout_bytes.get_data().decode("utf-8", errors="replace")
+                if stdout_bytes
+                else ""
+            )
+            stderr = (
+                stderr_bytes.get_data().decode("utf-8", errors="replace")
+                if stderr_bytes
+                else ""
+            )
             if not ok:
                 rc = 1
             else:
@@ -99,7 +111,7 @@ def has_touchpad() -> bool:
                 if "touchpad" in name or "trackpad" in name:
                     result = True
                     break
-    except Exception:
+    except (OSError, FileNotFoundError):
         pass
 
     _touchpad_cache = result
@@ -178,7 +190,9 @@ def get_focused_window(callback: Callable[[dict | None], None]) -> None:
     _run_async(["niri", "msg", "--json", "focused-window"], _done)
 
 
-def action(action_name: str, *args: str, callback: Callable[[bool], None] | None = None) -> None:
+def action(
+    action_name: str, *args: str, callback: Callable[[bool], None] | None = None
+) -> None:
     cmd = ["niri", "msg", "action", action_name] + list(args)
 
     def _done(_stdout: str, _stderr: str, rc: int) -> None:
@@ -196,13 +210,19 @@ def run_in_thread(fn: Callable, callback: Callable | None = None):
     import threading
 
     import gi
+
     gi.require_version("GLib", "2.0")
     from gi.repository import GLib
 
     def _worker():
         result = fn()
         if callback is not None:
-            GLib.idle_add(lambda: callback(result) or False)
+
+            def _cb_fallback() -> bool:
+                callback(result)
+                return False
+
+            GLib.idle_add(_cb_fallback)
 
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
