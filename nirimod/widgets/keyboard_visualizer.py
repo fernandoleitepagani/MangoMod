@@ -9,6 +9,7 @@ import math
 
 try:
     import cairo  # noqa: F401
+
     HAS_CAIRO = True
 except ImportError:
     HAS_CAIRO = False
@@ -24,57 +25,335 @@ from nirimod.xkb_helper import XkbHelper
 KEYBOARD_GEOMETRIES: dict[str, list[list[tuple[str, int]]]] = {
     "ANSI": [
         # Row 0 — function row
-        [("escape", 4), ("", 2), ("f1", 3), ("f2", 3), ("f3", 3), ("f4", 3), ("", 2), ("f5", 3), ("f6", 3), ("f7", 3), ("f8", 3), ("", 2), ("f9", 3), ("f10", 3), ("f11", 3), ("f12", 3), ("", 2), ("print", 4), ("insert", 4), ("delete", 4)],
+        [
+            ("escape", 4),
+            ("", 2),
+            ("f1", 3),
+            ("f2", 3),
+            ("f3", 3),
+            ("f4", 3),
+            ("", 2),
+            ("f5", 3),
+            ("f6", 3),
+            ("f7", 3),
+            ("f8", 3),
+            ("", 2),
+            ("f9", 3),
+            ("f10", 3),
+            ("f11", 3),
+            ("f12", 3),
+            ("", 2),
+            ("print", 4),
+            ("insert", 4),
+            ("delete", 4),
+        ],
         # Row 1 — number row
-        [("grave", 4), ("1", 4), ("2", 4), ("3", 4), ("4", 4), ("5", 4), ("6", 4), ("7", 4), ("8", 4), ("9", 4), ("0", 4), ("minus", 4), ("equal", 4), ("backspace", 8)],
+        [
+            ("grave", 4),
+            ("1", 4),
+            ("2", 4),
+            ("3", 4),
+            ("4", 4),
+            ("5", 4),
+            ("6", 4),
+            ("7", 4),
+            ("8", 4),
+            ("9", 4),
+            ("0", 4),
+            ("minus", 4),
+            ("equal", 4),
+            ("backspace", 8),
+        ],
         # Row 2 — QWERTY
-        [("tab", 6), ("q", 4), ("w", 4), ("e", 4), ("r", 4), ("t", 4), ("y", 4), ("u", 4), ("i", 4), ("o", 4), ("p", 4), ("bracketleft", 4), ("bracketright", 4), ("backslash", 6)],
+        [
+            ("tab", 6),
+            ("q", 4),
+            ("w", 4),
+            ("e", 4),
+            ("r", 4),
+            ("t", 4),
+            ("y", 4),
+            ("u", 4),
+            ("i", 4),
+            ("o", 4),
+            ("p", 4),
+            ("bracketleft", 4),
+            ("bracketright", 4),
+            ("backslash", 6),
+        ],
         # Row 3 — home row
-        [("capslock", 7), ("a", 4), ("s", 4), ("d", 4), ("f", 4), ("g", 4), ("h", 4), ("j", 4), ("k", 4), ("l", 4), ("semicolon", 4), ("quote", 4), ("return", 9)],
+        [
+            ("capslock", 7),
+            ("a", 4),
+            ("s", 4),
+            ("d", 4),
+            ("f", 4),
+            ("g", 4),
+            ("h", 4),
+            ("j", 4),
+            ("k", 4),
+            ("l", 4),
+            ("semicolon", 4),
+            ("quote", 4),
+            ("return", 9),
+        ],
         # Row 4 — shift row
-        [("shiftleft", 7), ("z", 4), ("x", 4), ("c", 4), ("v", 4), ("b", 4), ("n", 4), ("m", 4), ("comma", 4), ("period", 4), ("slash", 4), ("shiftright", 5), ("up", 4), ("", 4)],
+        [
+            ("shiftleft", 7),
+            ("z", 4),
+            ("x", 4),
+            ("c", 4),
+            ("v", 4),
+            ("b", 4),
+            ("n", 4),
+            ("m", 4),
+            ("comma", 4),
+            ("period", 4),
+            ("slash", 4),
+            ("shiftright", 5),
+            ("up", 4),
+            ("", 4),
+        ],
         # Row 5 — bottom row
-        [("ctrlleft", 6), ("superleft", 6), ("altleft", 6), ("space", 24), ("altright", 6), ("left", 4), ("down", 4), ("right", 4)],
+        [
+            ("ctrlleft", 6),
+            ("superleft", 6),
+            ("altleft", 6),
+            ("space", 24),
+            ("altright", 6),
+            ("left", 4),
+            ("down", 4),
+            ("right", 4),
+        ],
     ],
     "ISO": [
         # Row 0 — function row
-        [("escape", 4), ("", 2), ("f1", 3), ("f2", 3), ("f3", 3), ("f4", 3), ("", 2), ("f5", 3), ("f6", 3), ("f7", 3), ("f8", 3), ("", 2), ("f9", 3), ("f10", 3), ("f11", 3), ("f12", 3), ("", 2), ("print", 4), ("insert", 4), ("delete", 4)],
+        [
+            ("escape", 4),
+            ("", 2),
+            ("f1", 3),
+            ("f2", 3),
+            ("f3", 3),
+            ("f4", 3),
+            ("", 2),
+            ("f5", 3),
+            ("f6", 3),
+            ("f7", 3),
+            ("f8", 3),
+            ("", 2),
+            ("f9", 3),
+            ("f10", 3),
+            ("f11", 3),
+            ("f12", 3),
+            ("", 2),
+            ("print", 4),
+            ("insert", 4),
+            ("delete", 4),
+        ],
         # Row 1 — number row
-        [("grave", 4), ("1", 4), ("2", 4), ("3", 4), ("4", 4), ("5", 4), ("6", 4), ("7", 4), ("8", 4), ("9", 4), ("0", 4), ("minus", 4), ("equal", 4), ("backspace", 8)],
+        [
+            ("grave", 4),
+            ("1", 4),
+            ("2", 4),
+            ("3", 4),
+            ("4", 4),
+            ("5", 4),
+            ("6", 4),
+            ("7", 4),
+            ("8", 4),
+            ("9", 4),
+            ("0", 4),
+            ("minus", 4),
+            ("equal", 4),
+            ("backspace", 8),
+        ],
         # Row 2 — QWERTY
-        [("tab", 6), ("q", 4), ("w", 4), ("e", 4), ("r", 4), ("t", 4), ("y", 4), ("u", 4), ("i", 4), ("o", 4), ("p", 4), ("bracketleft", 4), ("bracketright", 4), ("return", 6)],
+        [
+            ("tab", 6),
+            ("q", 4),
+            ("w", 4),
+            ("e", 4),
+            ("r", 4),
+            ("t", 4),
+            ("y", 4),
+            ("u", 4),
+            ("i", 4),
+            ("o", 4),
+            ("p", 4),
+            ("bracketleft", 4),
+            ("bracketright", 4),
+            ("return", 6),
+        ],
         # Row 3 — home row
-        [("capslock", 7), ("a", 4), ("s", 4), ("d", 4), ("f", 4), ("g", 4), ("h", 4), ("j", 4), ("k", 4), ("l", 4), ("semicolon", 4), ("quote", 4), ("backslash", 4), ("return", 5)],
+        [
+            ("capslock", 7),
+            ("a", 4),
+            ("s", 4),
+            ("d", 4),
+            ("f", 4),
+            ("g", 4),
+            ("h", 4),
+            ("j", 4),
+            ("k", 4),
+            ("l", 4),
+            ("semicolon", 4),
+            ("quote", 4),
+            ("backslash", 4),
+            ("return", 5),
+        ],
         # Row 4 — shift row
-        [("shiftleft", 4), ("less", 4), ("z", 4), ("x", 4), ("c", 4), ("v", 4), ("b", 4), ("n", 4), ("m", 4), ("comma", 4), ("period", 4), ("slash", 4), ("shiftright", 4), ("up", 4), ("", 4)],
+        [
+            ("shiftleft", 4),
+            ("less", 4),
+            ("z", 4),
+            ("x", 4),
+            ("c", 4),
+            ("v", 4),
+            ("b", 4),
+            ("n", 4),
+            ("m", 4),
+            ("comma", 4),
+            ("period", 4),
+            ("slash", 4),
+            ("shiftright", 4),
+            ("up", 4),
+            ("", 4),
+        ],
         # Row 5 — bottom row
-        [("ctrlleft", 6), ("superleft", 6), ("altleft", 6), ("space", 24), ("altright", 6), ("left", 4), ("down", 4), ("right", 4)],
-    ]
+        [
+            ("ctrlleft", 6),
+            ("superleft", 6),
+            ("altleft", 6),
+            ("space", 24),
+            ("altright", 6),
+            ("left", 4),
+            ("down", 4),
+            ("right", 4),
+        ],
+    ],
 }
 
 _KID_TO_KEYCODE = {
     # Function row
-    "escape": 1, "f1": 59, "f2": 60, "f3": 61, "f4": 62, "f5": 63, "f6": 64, "f7": 65, "f8": 66, "f9": 67, "f10": 68, "f11": 87, "f12": 88, "print": 99, "insert": 110, "delete": 111,
+    "escape": 1,
+    "f1": 59,
+    "f2": 60,
+    "f3": 61,
+    "f4": 62,
+    "f5": 63,
+    "f6": 64,
+    "f7": 65,
+    "f8": 66,
+    "f9": 67,
+    "f10": 68,
+    "f11": 87,
+    "f12": 88,
+    "print": 99,
+    "insert": 110,
+    "delete": 111,
     # Number row
-    "grave": 41, "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "7": 8, "8": 9, "9": 10, "0": 11, "minus": 12, "equal": 13, "backspace": 14,
+    "grave": 41,
+    "1": 2,
+    "2": 3,
+    "3": 4,
+    "4": 5,
+    "5": 6,
+    "6": 7,
+    "7": 8,
+    "8": 9,
+    "9": 10,
+    "0": 11,
+    "minus": 12,
+    "equal": 13,
+    "backspace": 14,
     # Row 2
-    "tab": 15, "q": 16, "w": 17, "e": 18, "r": 19, "t": 20, "y": 21, "u": 22, "i": 23, "o": 24, "p": 25, "bracketleft": 26, "bracketright": 27, "backslash": 43,
+    "tab": 15,
+    "q": 16,
+    "w": 17,
+    "e": 18,
+    "r": 19,
+    "t": 20,
+    "y": 21,
+    "u": 22,
+    "i": 23,
+    "o": 24,
+    "p": 25,
+    "bracketleft": 26,
+    "bracketright": 27,
+    "backslash": 43,
     # Row 3
-    "capslock": 58, "a": 30, "s": 31, "d": 32, "f": 33, "g": 34, "h": 35, "j": 36, "k": 37, "l": 38, "semicolon": 39, "quote": 40, "return": 28,
+    "capslock": 58,
+    "a": 30,
+    "s": 31,
+    "d": 32,
+    "f": 33,
+    "g": 34,
+    "h": 35,
+    "j": 36,
+    "k": 37,
+    "l": 38,
+    "semicolon": 39,
+    "quote": 40,
+    "return": 28,
     # Row 4
-    "shiftleft": 42, "less": 94, "z": 44, "x": 45, "c": 46, "v": 47, "b": 48, "n": 49, "m": 50, "comma": 51, "period": 52, "slash": 53, "shiftright": 54, "up": 103,
+    "shiftleft": 42,
+    "less": 94,
+    "z": 44,
+    "x": 45,
+    "c": 46,
+    "v": 47,
+    "b": 48,
+    "n": 49,
+    "m": 50,
+    "comma": 51,
+    "period": 52,
+    "slash": 53,
+    "shiftright": 54,
+    "up": 103,
     # Row 5
-    "ctrlleft": 29, "superleft": 125, "altleft": 56, "space": 57, "altright": 100, "left": 105, "down": 108, "right": 106
+    "ctrlleft": 29,
+    "superleft": 125,
+    "altleft": 56,
+    "space": 57,
+    "altright": 100,
+    "left": 105,
+    "down": 108,
+    "right": 106,
 }
 
 _STATIC_LABELS = {
-    "escape": "Esc", "backspace": "Bksp", "tab": "Tab", "return": "Enter", "capslock": "Caps",
-    "shiftleft": "Shift", "shiftright": "Shift", "ctrlleft": "Ctrl", "superleft": "Super",
-    "altleft": "Alt", "altright": "Alt", "up": "↑", "down": "↓", "left": "←", "right": "→", "space": "",
+    "escape": "Esc",
+    "backspace": "Bksp",
+    "tab": "Tab",
+    "return": "Enter",
+    "capslock": "Caps",
+    "shiftleft": "Shift",
+    "shiftright": "Shift",
+    "ctrlleft": "Ctrl",
+    "superleft": "Super",
+    "altleft": "Alt",
+    "altright": "Alt",
+    "up": "↑",
+    "down": "↓",
+    "left": "←",
+    "right": "→",
+    "space": "",
     "grave": "`",
-    "f1": "F1", "f2": "F2", "f3": "F3", "f4": "F4", "f5": "F5", "f6": "F6",
-    "f7": "F7", "f8": "F8", "f9": "F9", "f10": "F10", "f11": "F11", "f12": "F12",
-    "print": "PrtSc", "insert": "Ins", "delete": "Del",
+    "f1": "F1",
+    "f2": "F2",
+    "f3": "F3",
+    "f4": "F4",
+    "f5": "F5",
+    "f6": "F6",
+    "f7": "F7",
+    "f8": "F8",
+    "f9": "F9",
+    "f10": "F10",
+    "f11": "F11",
+    "f12": "F12",
+    "print": "PrtSc",
+    "insert": "Ins",
+    "delete": "Del",
 }
 
 
@@ -126,9 +405,18 @@ _KEYSYM_ALIAS: dict[str, str] = {
     "del": "delete",
     "insert": "insert",
     "ins": "insert",
-    "f1": "f1", "f2": "f2", "f3": "f3", "f4": "f4",
-    "f5": "f5", "f6": "f6", "f7": "f7", "f8": "f8",
-    "f9": "f9", "f10": "f10", "f11": "f11", "f12": "f12",
+    "f1": "f1",
+    "f2": "f2",
+    "f3": "f3",
+    "f4": "f4",
+    "f5": "f5",
+    "f6": "f6",
+    "f7": "f7",
+    "f8": "f8",
+    "f9": "f9",
+    "f10": "f10",
+    "f11": "f11",
+    "f12": "f12",
 }
 
 for _c in "abcdefghijklmnopqrstuvwxyz0123456789":
@@ -146,32 +434,32 @@ def _rgb(r: int, g: int, b: int, a: float = 1.0):
 
 
 # Unbound key
-_COL_KEY_BG       = _rgb(30, 30, 36)          # dark charcoal fill
-_COL_KEY_BORDER   = _rgb(255, 255, 255, 0.07) # barely visible edge
-_COL_KEY_FG       = _rgb(200, 200, 210)        # label colour
+_COL_KEY_BG = _rgb(30, 30, 36)  # dark charcoal fill
+_COL_KEY_BORDER = _rgb(255, 255, 255, 0.07)  # barely visible edge
+_COL_KEY_FG = _rgb(200, 200, 210)  # label colour
 
 # Bound key
-_COL_BOUND_BG     = _rgb(45, 30, 80)           # muted indigo fill
-_COL_BOUND_BORDER = _rgb(100, 60, 160, 1.0)    # soft purple border
-_COL_BOUND_GLOW   = _rgb(100, 60, 160, 0.20)   # subtle outer glow
-_COL_BOUND_MOD    = _rgb(160, 140, 200)         # muted MOD label tint
+_COL_BOUND_BG = _rgb(45, 30, 80)  # muted indigo fill
+_COL_BOUND_BORDER = _rgb(100, 60, 160, 1.0)  # soft purple border
+_COL_BOUND_GLOW = _rgb(100, 60, 160, 0.20)  # subtle outer glow
+_COL_BOUND_MOD = _rgb(160, 140, 200)  # muted MOD label tint
 
 # Selected key
-_COL_SEL_BG       = _rgb(70, 40, 120)
-_COL_SEL_BORDER   = _rgb(140, 80, 200, 1.0)
-_COL_SEL_GLOW     = _rgb(140, 80, 200, 0.30)
+_COL_SEL_BG = _rgb(70, 40, 120)
+_COL_SEL_BORDER = _rgb(140, 80, 200, 1.0)
+_COL_SEL_GLOW = _rgb(140, 80, 200, 0.30)
 
 # Search-match key
-_COL_SEARCH_BG     = _rgb(100, 50, 130)
+_COL_SEARCH_BG = _rgb(100, 50, 130)
 _COL_SEARCH_BORDER = _rgb(160, 80, 180, 1.0)
-_COL_SEARCH_GLOW   = _rgb(160, 80, 180, 0.25)
+_COL_SEARCH_GLOW = _rgb(160, 80, 180, 0.25)
 
 # Badge pill
-_COL_BADGE_BG   = _rgb(80, 40, 140)
-_COL_BADGE_FG   = _rgb(255, 255, 255)
+_COL_BADGE_BG = _rgb(80, 40, 140)
+_COL_BADGE_FG = _rgb(255, 255, 255)
 
 # Chassis
-_COL_FRAME_BG     = _rgb(10, 10, 12)
+_COL_FRAME_BG = _rgb(10, 10, 12)
 _COL_FRAME_BORDER = _rgb(255, 255, 255, 0.07)
 
 
@@ -216,7 +504,7 @@ class KeyboardVisualizer(Gtk.Box):
         self._selected_id: str | None = None
         self._search_q: str = ""
         self._dynamic_keysym_to_kid: dict[str, str] = {}
-        
+
         self._xkb = XkbHelper()
         self._xkb.set_layout(self._layout_id)
 
@@ -268,21 +556,34 @@ class KeyboardVisualizer(Gtk.Box):
         """Set the visualizer layout mapping (e.g. 'us', 'it')."""
         self._layout_id = layout_id
         self._xkb.set_layout(layout_id)
-        
 
         base_layout = layout_id.split(":")[0].lower()
-        iso_layouts = {'it', 'fr', 'de', 'es', 'pt', 'uk', 'ru', 'ch', 'be', 'no', 'se', 'fi', 'dk'}
+        iso_layouts = {
+            "it",
+            "fr",
+            "de",
+            "es",
+            "pt",
+            "uk",
+            "ru",
+            "ch",
+            "be",
+            "no",
+            "se",
+            "fi",
+            "dk",
+        }
         if base_layout in iso_layouts:
             self._geometry_id = "ISO"
         else:
             self._geometry_id = "ANSI"
-            
+
         self._dynamic_keysym_to_kid.clear()
         for kid, keycode in _KID_TO_KEYCODE.items():
             sym = self._xkb.get_keysym_name(keycode)
             if sym:
                 self._dynamic_keysym_to_kid[sym.lower()] = kid
-            
+
         if hasattr(self, "_area"):
             self._area.queue_draw()
 
@@ -290,7 +591,6 @@ class KeyboardVisualizer(Gtk.Box):
         self._search_q = query.strip().lower()
         if hasattr(self, "_area"):
             self._area.queue_draw()
-
 
     # Internal helpers
 
@@ -326,9 +626,11 @@ class KeyboardVisualizer(Gtk.Box):
         inner_w = width - 2 * pad_x
         inner_h = height - 2 * pad_y
 
-        active_geom = KEYBOARD_GEOMETRIES.get(self._geometry_id) or KEYBOARD_GEOMETRIES["ANSI"]
+        active_geom = (
+            KEYBOARD_GEOMETRIES.get(self._geometry_id) or KEYBOARD_GEOMETRIES["ANSI"]
+        )
         n_rows = len(active_geom)
-        
+
         frow_ratio = 0.7
         frow_gap = max(3.0, inner_h * 0.015)
         row_h = (inner_h - frow_gap) / (frow_ratio + n_rows - 1)
@@ -377,35 +679,39 @@ class KeyboardVisualizer(Gtk.Box):
                 kw = key_w - key_gap
                 kh = this_row_h - key_gap
 
-                binds   = self._bindings.get(kid, [])
-                is_bound  = bool(binds)
-                is_sel    = self._selected_id == kid
+                binds = self._bindings.get(kid, [])
+                is_bound = bool(binds)
+                is_sel = self._selected_id == kid
                 is_search = is_bound and self._matches_search(binds)
 
                 if is_sel:
-                    fill   = _COL_SEL_BG
+                    fill = _COL_SEL_BG
                     border = _COL_SEL_BORDER
-                    glow   = _COL_SEL_GLOW
+                    glow = _COL_SEL_GLOW
                 elif is_search:
-                    fill   = _COL_SEARCH_BG
+                    fill = _COL_SEARCH_BG
                     border = _COL_SEARCH_BORDER
-                    glow   = _COL_SEARCH_GLOW
+                    glow = _COL_SEARCH_GLOW
                 elif is_bound:
-                    fill   = _COL_BOUND_BG
+                    fill = _COL_BOUND_BG
                     border = _COL_BOUND_BORDER
-                    glow   = _COL_BOUND_GLOW
+                    glow = _COL_BOUND_GLOW
                 else:
-                    fill   = _COL_KEY_BG
+                    fill = _COL_KEY_BG
                     border = _COL_KEY_BORDER
-                    glow   = None
+                    glow = None
 
                 if glow:
                     for spread, alpha_scale in ((6, 0.15), (3, 0.25), (1, 0.35)):
-                        cr.set_source_rgba(glow[0], glow[1], glow[2], glow[3] * alpha_scale)
+                        cr.set_source_rgba(
+                            glow[0], glow[1], glow[2], glow[3] * alpha_scale
+                        )
                         self._rounded_rect(
                             cr,
-                            kx - spread, ky - spread,
-                            kw + spread * 2, kh + spread * 2,
+                            kx - spread,
+                            ky - spread,
+                            kw + spread * 2,
+                            kh + spread * 2,
                             radius + spread,
                         )
                         cr.fill()
@@ -463,7 +769,9 @@ class KeyboardVisualizer(Gtk.Box):
                     self._rounded_rect(cr, bx, by, bw, bh_pill, bh_pill / 2)
                     cr.fill()
                     cr.set_source_rgba(*_COL_BADGE_FG)
-                    cr.move_to(int(bx + bpad - bte.x_bearing), int(by + bpad - bte.y_bearing))
+                    cr.move_to(
+                        int(bx + bpad - bte.x_bearing), int(by + bpad - bte.y_bearing)
+                    )
                     cr.show_text(badge_txt)
 
                 self._key_rects.append((kid, kx, ky, kw, kh))
@@ -578,7 +886,6 @@ class _ActionPanel(Gtk.Box):
 
         self.append(Gtk.Separator())
 
-
         self._grp_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._grp_container.set_margin_start(8)
         self._grp_container.set_margin_end(8)
@@ -606,7 +913,7 @@ class _ActionPanel(Gtk.Box):
             self._key_label.set_label(key_id.upper())
             self._count_label.set_label("No bindings")
             self._header_add_btn.set_visible(False)
-            
+
             add_btn = Gtk.Button(label=f"Create Binding for {key_id.upper()}")
             add_btn.add_css_class("suggested-action")
             add_btn.add_css_class("pill")
@@ -615,7 +922,7 @@ class _ActionPanel(Gtk.Box):
             add_btn.set_margin_bottom(8)
             if self._on_add:
                 add_btn.connect("clicked", lambda *_: self._on_add(key_id))
-            
+
             new_grp.add(add_btn)
         else:
             self._key_label.set_label(key_id.upper())
@@ -671,13 +978,15 @@ class _ActionPanel(Gtk.Box):
                     lock.set_tooltip_text("Allowed when screen is locked")
                     lock.set_valign(Gtk.Align.CENTER)
                     row.add_suffix(lock)
-                    
+
                 edit_btn = Gtk.Button(icon_name="document-edit-symbolic")
                 edit_btn.add_css_class("flat")
                 edit_btn.add_css_class("circular")
                 edit_btn.set_valign(Gtk.Align.CENTER)
                 if self._on_edit:
-                    edit_btn.connect("clicked", lambda *_, bind_ref=b: self._on_edit(bind_ref))
+                    edit_btn.connect(
+                        "clicked", lambda *_, bind_ref=b: self._on_edit(bind_ref)
+                    )
                 row.add_suffix(edit_btn)
 
                 del_btn = Gtk.Button(icon_name="user-trash-symbolic")
@@ -686,11 +995,12 @@ class _ActionPanel(Gtk.Box):
                 del_btn.add_css_class("error")
                 del_btn.set_valign(Gtk.Align.CENTER)
                 if self._on_delete:
-                    del_btn.connect("clicked", lambda *_, bind_ref=b: self._on_delete(bind_ref))
+                    del_btn.connect(
+                        "clicked", lambda *_, bind_ref=b: self._on_delete(bind_ref)
+                    )
                 row.add_suffix(del_btn)
 
                 new_grp.add(row)
 
         self._grp_container.append(new_grp)
         self.set_visible(True)
-
