@@ -123,19 +123,27 @@ class LayoutPage(BasePage):
         mode_row.set_selected(1 if use_fixed else 0)
         dcw_grp.add(mode_row)
 
-        prop_adj = Gtk.Adjustment(value=prop_val, lower=0.05, upper=1.0, step_increment=0.05)
+        prop_adj = Gtk.Adjustment(
+            value=prop_val, lower=0.05, upper=1.0, step_increment=0.05
+        )
         prop_spin = Gtk.SpinButton(adjustment=prop_adj, digits=2, climb_rate=1)
         prop_spin.set_valign(Gtk.Align.CENTER)
-        prop_spin.connect("value-changed", lambda s: self._set_dcw_proportion(s.get_value()))
+        prop_spin.connect(
+            "value-changed", lambda s: self._set_dcw_proportion(s.get_value())
+        )
         prop_row = Adw.ActionRow(title="Proportion")
         prop_row.add_suffix(prop_spin)
         prop_row.set_visible(not use_fixed)
         dcw_grp.add(prop_row)
 
-        fixed_adj = Gtk.Adjustment(value=fixed_val, lower=100, upper=7680, step_increment=10)
+        fixed_adj = Gtk.Adjustment(
+            value=fixed_val, lower=100, upper=7680, step_increment=10
+        )
         fixed_spin = Gtk.SpinButton(adjustment=fixed_adj, digits=0, climb_rate=1)
         fixed_spin.set_valign(Gtk.Align.CENTER)
-        fixed_spin.connect("value-changed", lambda s: self._set_dcw_fixed(int(s.get_value())))
+        fixed_spin.connect(
+            "value-changed", lambda s: self._set_dcw_fixed(int(s.get_value()))
+        )
         fixed_row = Adw.ActionRow(title="Fixed Width (px)")
         fixed_row.add_suffix(fixed_spin)
         fixed_row.set_visible(use_fixed)
@@ -234,14 +242,16 @@ class LayoutPage(BasePage):
                 child.args = [round(s.get_value(), 5)]
                 new_children.append(child)
             else:
-                new_children.append(KdlNode("proportion", args=[round(s.get_value(), 5)]))
-                
+                new_children.append(
+                    KdlNode("proportion", args=[round(s.get_value(), 5)])
+                )
+
         salvaged = ""
         for i in range(len(self._preset_spins), len(pcw.children)):
             salvaged += pcw.children[i].leading_trivia
         if salvaged and new_children:
             new_children[-1].trailing_trivia += salvaged
-            
+
         pcw.children = new_children
         self._commit("preset column widths")
 
@@ -283,7 +293,7 @@ class LayoutPage(BasePage):
     def _toggle_top(self, key: str, enabled: bool):
         nodes = self._nodes
         existing = next((n for n in reversed(nodes) if n.name == key), None)
-        
+
         app_state = self._win.app_state
         if enabled and not existing:
             cache = getattr(app_state, "_removed_top_nodes", {})
@@ -297,7 +307,7 @@ class LayoutPage(BasePage):
                 app_state._removed_top_nodes = {}
             app_state._removed_top_nodes[key] = (nodes.index(existing), existing)
             nodes.remove(existing)
-            
+
         self._commit(f"toggle {key}")
 
     def refresh(self):

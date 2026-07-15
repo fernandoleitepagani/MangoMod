@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -72,14 +70,14 @@ class BasePage:
     def _commit(self, description: str = "change"):
         app_state = self._win.app_state
         after = app_state.write_current_kdl()
-        
+
         before = app_state.undo.last_snapshot
         if before is None:
             before = app_state.saved_kdl
-            
+
         if before != after:
             self._win.push_undo(description, before, after)
-            
+
         if after == app_state.saved_kdl:
             self._win.mark_clean()
         else:
