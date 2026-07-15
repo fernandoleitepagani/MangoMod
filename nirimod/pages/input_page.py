@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 import gi
@@ -34,7 +32,9 @@ class InputPage(BasePage):
         content = self._content
         nodes = self._nodes
 
-        kb_expander = Adw.ExpanderRow(title="Keyboard", subtitle="XKB options &amp; key repeat")
+        kb_expander = Adw.ExpanderRow(
+            title="Keyboard", subtitle="XKB options &amp; key repeat"
+        )
         kb_expander.add_css_class("nm-expander")
 
         kb_node = find_or_create(nodes, "input", "keyboard")
@@ -61,18 +61,32 @@ class InputPage(BasePage):
 
         delay_adj = Gtk.Adjustment(
             value=kb_node.child_arg("repeat-delay") or 600,
-            lower=100, upper=3000, step_increment=50,
+            lower=100,
+            upper=3000,
+            step_increment=50,
         )
-        delay_row = Adw.SpinRow(title="Repeat Delay (ms)", adjustment=delay_adj, digits=0)
-        delay_row.connect("notify::value", lambda r, _: self._set_kb("repeat-delay", int(r.get_value())))
+        delay_row = Adw.SpinRow(
+            title="Repeat Delay (ms)", adjustment=delay_adj, digits=0
+        )
+        delay_row.connect(
+            "notify::value",
+            lambda r, _: self._set_kb("repeat-delay", int(r.get_value())),
+        )
         kb_expander.add_row(delay_row)
 
         rate_adj = Gtk.Adjustment(
             value=kb_node.child_arg("repeat-rate") or 25,
-            lower=1, upper=200, step_increment=1,
+            lower=1,
+            upper=200,
+            step_increment=1,
         )
-        rate_row = Adw.SpinRow(title="Repeat Rate (keys/sec)", adjustment=rate_adj, digits=0)
-        rate_row.connect("notify::value", lambda r, _: self._set_kb("repeat-rate", int(r.get_value())))
+        rate_row = Adw.SpinRow(
+            title="Repeat Rate (keys/sec)", adjustment=rate_adj, digits=0
+        )
+        rate_row.connect(
+            "notify::value",
+            lambda r, _: self._set_kb("repeat-rate", int(r.get_value())),
+        )
         kb_expander.add_row(rate_row)
 
         numlock_row = Adw.SwitchRow(title="Enable Num Lock on Startup")
@@ -112,10 +126,14 @@ class InputPage(BasePage):
                 except ValueError:
                     pass
         self._last_scroll_val = scroll_val
-        scroll_adj = Gtk.Adjustment(value=scroll_val, lower=0, upper=100, step_increment=1)
+        scroll_adj = Gtk.Adjustment(
+            value=scroll_val, lower=0, upper=100, step_increment=1
+        )
         scroll_pct_row = Adw.SpinRow(
-            title="Max Scroll Amount (%)", subtitle="0% = only fully visible windows",
-            adjustment=scroll_adj, digits=0,
+            title="Max Scroll Amount (%)",
+            subtitle="0% = only fully visible windows",
+            adjustment=scroll_adj,
+            digits=0,
         )
         scroll_pct_row.set_sensitive(ffm_node is not None)
         self._scroll_pct_row = scroll_pct_row
@@ -133,8 +151,11 @@ class InputPage(BasePage):
         warp_init = input_node.get_child("warp-mouse-to-focus") is not None
         warp_row = Adw.SwitchRow(title="Warp Mouse to Focus")
         warp_row.set_active(warp_init)
-        safe_switch_connect(warp_row, warp_init,
-            lambda enabled: self._toggle_input_flag("warp-mouse-to-focus", enabled))
+        safe_switch_connect(
+            warp_row,
+            warp_init,
+            lambda enabled: self._toggle_input_flag("warp-mouse-to-focus", enabled),
+        )
         focus_grp.add(warp_row)
         content.append(focus_grp)
 
@@ -152,7 +173,9 @@ class InputPage(BasePage):
             r = Adw.SwitchRow(title=label, subtitle=subtitle)
             ini = tp_node.get_child(key) is not None
             r.set_active(ini)
-            safe_switch_connect(r, ini, lambda enabled, k=key: self._set_tp_flag(k, enabled))
+            safe_switch_connect(
+                r, ini, lambda enabled, k=key: self._set_tp_flag(k, enabled)
+            )
             return r
 
         def tp_bool_switch(key, label, default_active=True, subtitle=""):
@@ -172,12 +195,20 @@ class InputPage(BasePage):
         tp_expander.add_row(tp_switch("natural-scroll", "Natural Scroll"))
         tp_expander.add_row(tp_bool_switch("drag", "Tap Drag"))
         tp_expander.add_row(tp_switch("drag-lock", "Tap Drag Lock"))
-        tp_expander.add_row(tp_switch("disabled-on-external-mouse", "Disable on External Mouse"))
+        tp_expander.add_row(
+            tp_switch("disabled-on-external-mouse", "Disable on External Mouse")
+        )
 
-        spd_adj = Gtk.Adjustment(value=float(tp_node.child_arg("accel-speed") or 0.0),
-            lower=-1.0, upper=1.0, step_increment=0.05)
+        spd_adj = Gtk.Adjustment(
+            value=float(tp_node.child_arg("accel-speed") or 0.0),
+            lower=-1.0,
+            upper=1.0,
+            step_increment=0.05,
+        )
         spd_row = Adw.SpinRow(title="Accel Speed", adjustment=spd_adj, digits=2)
-        spd_row.connect("notify::value", lambda r, _: self._set_tp("accel-speed", r.get_value()))
+        spd_row.connect(
+            "notify::value", lambda r, _: self._set_tp("accel-speed", r.get_value())
+        )
         tp_expander.add_row(spd_row)
 
         ap_model = Gtk.StringList.new(ACCEL_PROFILES)
@@ -185,8 +216,12 @@ class InputPage(BasePage):
         cur_ap = tp_node.child_arg("accel-profile") or "default"
         if cur_ap in ACCEL_PROFILES:
             ap_row.set_selected(ACCEL_PROFILES.index(cur_ap))
-        ap_row.connect("notify::selected",
-            lambda r, _: self._set_tp("accel-profile", ACCEL_PROFILES[r.get_selected()]))
+        ap_row.connect(
+            "notify::selected",
+            lambda r, _: self._set_tp(
+                "accel-profile", ACCEL_PROFILES[r.get_selected()]
+            ),
+        )
         tp_expander.add_row(ap_row)
 
         sm_model = Gtk.StringList.new(SCROLL_METHODS_TP)
@@ -194,8 +229,12 @@ class InputPage(BasePage):
         cur_sm = tp_node.child_arg("scroll-method") or "two-finger"
         if cur_sm in SCROLL_METHODS_TP:
             sm_row.set_selected(SCROLL_METHODS_TP.index(cur_sm))
-        sm_row.connect("notify::selected",
-            lambda r, _: self._set_tp("scroll-method", SCROLL_METHODS_TP[r.get_selected()]))
+        sm_row.connect(
+            "notify::selected",
+            lambda r, _: self._set_tp(
+                "scroll-method", SCROLL_METHODS_TP[r.get_selected()]
+            ),
+        )
         tp_expander.add_row(sm_row)
 
         cm_model = Gtk.StringList.new(CLICK_METHODS)
@@ -203,8 +242,10 @@ class InputPage(BasePage):
         cur_cm = tp_node.child_arg("click-method") or "button-areas"
         if cur_cm in CLICK_METHODS:
             cm_row.set_selected(CLICK_METHODS.index(cur_cm))
-        cm_row.connect("notify::selected",
-            lambda r, _: self._set_tp("click-method", CLICK_METHODS[r.get_selected()]))
+        cm_row.connect(
+            "notify::selected",
+            lambda r, _: self._set_tp("click-method", CLICK_METHODS[r.get_selected()]),
+        )
         tp_expander.add_row(cm_row)
 
         tp_grp = Adw.PreferencesGroup()
@@ -219,13 +260,21 @@ class InputPage(BasePage):
         m_nat = Adw.SwitchRow(title="Natural Scroll")
         mn_init = m_node.get_child("natural-scroll") is not None
         m_nat.set_active(mn_init)
-        safe_switch_connect(m_nat, mn_init, lambda enabled: self._set_m_flag("natural-scroll", enabled))
+        safe_switch_connect(
+            m_nat, mn_init, lambda enabled: self._set_m_flag("natural-scroll", enabled)
+        )
         m_expander.add_row(m_nat)
 
-        m_spd_adj = Gtk.Adjustment(value=float(m_node.child_arg("accel-speed") or 0.0),
-            lower=-1.0, upper=1.0, step_increment=0.05)
+        m_spd_adj = Gtk.Adjustment(
+            value=float(m_node.child_arg("accel-speed") or 0.0),
+            lower=-1.0,
+            upper=1.0,
+            step_increment=0.05,
+        )
         m_spd_row = Adw.SpinRow(title="Accel Speed", adjustment=m_spd_adj, digits=2)
-        m_spd_row.connect("notify::value", lambda r, _: self._set_m("accel-speed", r.get_value()))
+        m_spd_row.connect(
+            "notify::value", lambda r, _: self._set_m("accel-speed", r.get_value())
+        )
         m_expander.add_row(m_spd_row)
 
         m_ap_model = Gtk.StringList.new(ACCEL_PROFILES)
@@ -233,8 +282,10 @@ class InputPage(BasePage):
         cur_m_ap = m_node.child_arg("accel-profile") or "default"
         if cur_m_ap in ACCEL_PROFILES:
             m_ap_row.set_selected(ACCEL_PROFILES.index(cur_m_ap))
-        m_ap_row.connect("notify::selected",
-            lambda r, _: self._set_m("accel-profile", ACCEL_PROFILES[r.get_selected()]))
+        m_ap_row.connect(
+            "notify::selected",
+            lambda r, _: self._set_m("accel-profile", ACCEL_PROFILES[r.get_selected()]),
+        )
         m_expander.add_row(m_ap_row)
 
         m_grp = Adw.PreferencesGroup()
@@ -245,29 +296,46 @@ class InputPage(BasePage):
         cursor_grp = Adw.PreferencesGroup(title="Cursor")
         cursor_node = next((n for n in nodes if n.name == "cursor"), None)
 
-        size_val = int(cursor_node.child_arg("xcursor-size") or 24) if cursor_node else 24
+        size_val = (
+            int(cursor_node.child_arg("xcursor-size") or 24) if cursor_node else 24
+        )
         size_adj = Gtk.Adjustment(value=size_val, lower=8, upper=256, step_increment=2)
         size_row = Adw.SpinRow(title="Cursor Size (px)", adjustment=size_adj, digits=0)
-        size_row.connect("notify::value",
-            lambda r, _: self._set_cursor("xcursor-size", int(r.get_value())))
+        size_row.connect(
+            "notify::value",
+            lambda r, _: self._set_cursor("xcursor-size", int(r.get_value())),
+        )
         cursor_grp.add(size_row)
 
-        hide_val = int(cursor_node.child_arg("hide-after-inactive-ms") or 0) if cursor_node else 0
-        hide_adj = Gtk.Adjustment(value=hide_val, lower=0, upper=60000, step_increment=500)
-        hide_row = Adw.SpinRow(title="Hide After Inactive (ms)", subtitle="0 = never hide",
-            adjustment=hide_adj, digits=0)
-        hide_row.connect("notify::value",
-            lambda r, _: self._set_cursor("hide-after-inactive-ms", int(r.get_value())))
+        hide_val = (
+            int(cursor_node.child_arg("hide-after-inactive-ms") or 0)
+            if cursor_node
+            else 0
+        )
+        hide_adj = Gtk.Adjustment(
+            value=hide_val, lower=0, upper=60000, step_increment=500
+        )
+        hide_row = Adw.SpinRow(
+            title="Hide After Inactive (ms)",
+            subtitle="0 = never hide",
+            adjustment=hide_adj,
+            digits=0,
+        )
+        hide_row.connect(
+            "notify::value",
+            lambda r, _: self._set_cursor("hide-after-inactive-ms", int(r.get_value())),
+        )
         cursor_grp.add(hide_row)
 
-        theme_val = str(cursor_node.child_arg("xcursor-theme") or "") if cursor_node else ""
+        theme_val = (
+            str(cursor_node.child_arg("xcursor-theme") or "") if cursor_node else ""
+        )
         theme_row = Adw.EntryRow(title="Cursor Theme (e.g. Adwaita)")
         theme_row.set_text(theme_val)
         theme_row.set_show_apply_button(True)
         theme_row.connect("apply", lambda r: self._set_cursor_theme(r.get_text()))
         cursor_grp.add(theme_row)
         content.append(cursor_grp)
-
 
     def _get_kb_node(self):
         return find_or_create(self._nodes, "input", "keyboard")
@@ -286,6 +354,7 @@ class InputPage(BasePage):
             set_child_arg(xkb, key, value.strip())
         else:
             from nirimod.kdl_parser import remove_child
+
             remove_child(xkb, key)
         self._commit(f"keyboard xkb {key}")
 
@@ -368,6 +437,7 @@ class InputPage(BasePage):
             set_child_arg(cur, "xcursor-theme", theme.strip())
         else:
             from nirimod.kdl_parser import remove_child
+
             remove_child(cur, "xcursor-theme")
         self._commit("cursor xcursor-theme")
 

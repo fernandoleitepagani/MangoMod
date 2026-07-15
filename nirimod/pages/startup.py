@@ -19,8 +19,6 @@ class StartupPage(BasePage):
         tb, header, _, content = self._make_toolbar_page("Startup Programs")
         self._content = content
 
-
-
         self.refresh()
         return tb
 
@@ -74,7 +72,7 @@ class StartupPage(BasePage):
                 grp.add(row)
 
             self._content.append(grp)
-            
+
             # Also add a convenient button at the bottom
             add_btn = Gtk.Button(label="Add Another Program")
             add_btn.add_css_class("pill")

@@ -69,7 +69,7 @@ class EnvironmentPage(BasePage):
                 grp.add(row)
 
             self._content.append(grp)
-            
+
             # Convenient button at the bottom
             add_btn = Gtk.Button(label="Add Another Variable")
             add_btn.add_css_class("pill")
@@ -81,11 +81,11 @@ class EnvironmentPage(BasePage):
     def _make_row(self, node: KdlNode, idx: int) -> Adw.ActionRow:
         key = node.name
         val = node.args[0] if node.args else ""
-        
+
         # Make key bold and distinct
         key_str = GLib.markup_escape_text(key)
         val_str = GLib.markup_escape_text(str(val))
-        
+
         row = Adw.ActionRow(
             title=f"<b>{key_str}</b>",
             subtitle=val_str if val_str else "(empty)",

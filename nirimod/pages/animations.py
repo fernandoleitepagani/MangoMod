@@ -10,33 +10,32 @@ import urllib.error
 import urllib.request
 
 import gi
+import logging
+
+logger = logging.getLogger(__name__)
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
-from nirimod.kdl_parser import KdlNode, find_or_create, parse_kdl, set_child_arg, set_node_flag
+from nirimod.kdl_parser import (
+    KdlNode,
+    find_or_create,
+    parse_kdl,
+    set_child_arg,
+    set_node_flag,
+)
 from nirimod.pages.base import BasePage
 
-_NIRIMATION_API = (
-    "https://api.github.com/repos/XansiVA/nirimation/contents/animations"
-)
+_NIRIMATION_API = "https://api.github.com/repos/XansiVA/nirimation/contents/animations"
 _NIRIMATION_RAW = (
     "https://raw.githubusercontent.com/XansiVA/nirimation/main/animations/{name}"
 )
-_NIRIMATION_HTML = (
-    "https://github.com/XansiVA/nirimation/blob/main/animations/{name}"
-)
+_NIRIMATION_HTML = "https://github.com/XansiVA/nirimation/blob/main/animations/{name}"
 
-_JGARZA_API = (
-    "https://api.github.com/repos/jgarza9788/niri-animation-collection/contents/animations"
-)
-_JGARZA_RAW = (
-    "https://raw.githubusercontent.com/jgarza9788/niri-animation-collection/main/animations/{name}"
-)
-_JGARZA_HTML = (
-    "https://github.com/jgarza9788/niri-animation-collection/blob/main/animations/{name}"
-)
+_JGARZA_API = "https://api.github.com/repos/jgarza9788/niri-animation-collection/contents/animations"
+_JGARZA_RAW = "https://raw.githubusercontent.com/jgarza9788/niri-animation-collection/main/animations/{name}"
+_JGARZA_HTML = "https://github.com/jgarza9788/niri-animation-collection/blob/main/animations/{name}"
 
 # In-memory cache: None = not fetched, list = fetched entries, Exception = error
 _nirimation_cache: list[dict] | Exception | None = None
@@ -52,24 +51,40 @@ _SOURCE_SLUGS = {
 }
 
 
-
 ANIM_GROUPS = [
-    ("Window Management", [
-        ("window-open", "Window Open", "window-new-symbolic"),
-        ("window-close", "Window Close", "window-close-symbolic"),
-        ("window-movement", "Window Movement", "transform-move-symbolic"),
-        ("window-resize", "Window Resize", "view-fullscreen-symbolic"),
-    ]),
-    ("Workspace", [
-        ("workspace-switch", "Workspace Switch", "video-display-symbolic"),
-        ("horizontal-view-movement", "Horizontal View Movement", "pan-end-symbolic"),
-    ]),
-    ("Interface", [
-        ("overview-open-close", "Overview Open/Close", "view-app-grid-symbolic"),
-        ("overview-screenshot", "Overview Screenshot", "camera-photo-symbolic"),
-        ("screenshot-ui-open", "Screenshot UI Open", "camera-photo-symbolic"),
-        ("config-notification-open-close", "Config Notification", "preferences-system-symbolic"),
-    ])
+    (
+        "Window Management",
+        [
+            ("window-open", "Window Open", "window-new-symbolic"),
+            ("window-close", "Window Close", "window-close-symbolic"),
+            ("window-movement", "Window Movement", "transform-move-symbolic"),
+            ("window-resize", "Window Resize", "view-fullscreen-symbolic"),
+        ],
+    ),
+    (
+        "Workspace",
+        [
+            ("workspace-switch", "Workspace Switch", "video-display-symbolic"),
+            (
+                "horizontal-view-movement",
+                "Horizontal View Movement",
+                "pan-end-symbolic",
+            ),
+        ],
+    ),
+    (
+        "Interface",
+        [
+            ("overview-open-close", "Overview Open/Close", "view-app-grid-symbolic"),
+            ("overview-screenshot", "Overview Screenshot", "camera-photo-symbolic"),
+            ("screenshot-ui-open", "Screenshot UI Open", "camera-photo-symbolic"),
+            (
+                "config-notification-open-close",
+                "Config Notification",
+                "preferences-system-symbolic",
+            ),
+        ],
+    ),
 ]
 
 PRESET_CURVES = {
@@ -121,21 +136,21 @@ class BezierEditor(Gtk.DrawingArea):
         if not hasattr(self, "_last_time"):
             self._last_time = current_time
             return True
-            
+
         dt = (current_time - self._last_time) / 1_000_000.0
         self._last_time = current_time
-        
+
         # Move at a constant speed of ~0.75 units per second
         speed = 0.75
         self._ball_t += (dt * speed) * self._ball_dir
-        
+
         if self._ball_t >= 1.0:
             self._ball_t = 1.0
             self._ball_dir = -1
         elif self._ball_t <= 0.0:
             self._ball_t = 0.0
             self._ball_dir = 1
-            
+
         self.queue_draw()
         return True
 
@@ -254,6 +269,7 @@ class BezierEditor(Gtk.DrawingArea):
 def _fetch_presets_from_github(api_url, raw_tmpl, html_tmpl, cache_attr, callback):
     """Generic preset fetcher for any GitHub contents API endpoint."""
     import sys
+
     mod = sys.modules[__name__]
     cached = getattr(mod, cache_attr)
     if cached is not None:
@@ -295,7 +311,7 @@ def _fetch_presets_from_github(api_url, raw_tmpl, html_tmpl, cache_attr, callbac
             entries.sort(key=lambda e: e["display_name"])
             setattr(mod, cache_attr, entries)
             GLib.idle_add(callback, entries)
-        except Exception as exc:
+        except (urllib.error.URLError, json.JSONDecodeError) as exc:
             setattr(mod, cache_attr, exc)
             GLib.idle_add(callback, exc)
 
@@ -305,16 +321,22 @@ def _fetch_presets_from_github(api_url, raw_tmpl, html_tmpl, cache_attr, callbac
 def _fetch_nirimation_presets(callback):
     """Fetch preset list from XansiVA/nirimation in a background thread."""
     _fetch_presets_from_github(
-        _NIRIMATION_API, _NIRIMATION_RAW, _NIRIMATION_HTML,
-        "_nirimation_cache", callback,
+        _NIRIMATION_API,
+        _NIRIMATION_RAW,
+        _NIRIMATION_HTML,
+        "_nirimation_cache",
+        callback,
     )
 
 
 def _fetch_jgarza_presets(callback):
     """Fetch preset list from jgarza9788/niri-animation-collection in a background thread."""
     _fetch_presets_from_github(
-        _JGARZA_API, _JGARZA_RAW, _JGARZA_HTML,
-        "_jgarza_cache", callback,
+        _JGARZA_API,
+        _JGARZA_RAW,
+        _JGARZA_HTML,
+        "_jgarza_cache",
+        callback,
     )
 
 
@@ -333,23 +355,26 @@ class AnimationsPage(BasePage):
                     data = json.load(f)
                     self._prev_anim_snapshot = data.get("prev_anim_snapshot")
                     self._active_preset_name = data.get("active_preset_name")
-        except Exception as e:
-            print(f"Failed to load animations state: {e}")
+        except (OSError, json.JSONDecodeError) as e:
+            logger.error(f"Failed to load animations state: {e}")
 
     def _save_state(self):
         try:
             self._state_file.parent.mkdir(parents=True, exist_ok=True)
             with open(self._state_file, "w", encoding="utf-8") as f:
-                json.dump({
-                    "prev_anim_snapshot": self._prev_anim_snapshot,
-                    "active_preset_name": self._active_preset_name
-                }, f)
-        except Exception as e:
-            print(f"Failed to save animations state: {e}")
+                json.dump(
+                    {
+                        "prev_anim_snapshot": self._prev_anim_snapshot,
+                        "active_preset_name": self._active_preset_name,
+                    },
+                    f,
+                )
+        except (OSError, TypeError, ValueError) as e:
+            logger.error(f"Failed to save animations state: {e}")
 
     def build(self) -> Gtk.Widget:
         tb, header, _, _ = self._make_toolbar_page("")
-        header.set_title_widget(Gtk.Box()) # hide the default title
+        header.set_title_widget(Gtk.Box())  # hide the default title
 
         # Custom Header (matches Workspace View / Keybindings aesthetic)
         header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
@@ -361,7 +386,7 @@ class AnimationsPage(BasePage):
         # Title/Subtitle Group
         title_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         title_vbox.set_hexpand(True)
-        
+
         self._main_title = Gtk.Label(label="Animations")
         self._main_title.set_xalign(0.0)
         self._main_title.add_css_class("title-1")
@@ -374,29 +399,28 @@ class AnimationsPage(BasePage):
         title_vbox.append(self._active_preset_lbl)
         header_box.append(title_vbox)
 
-
         # View Switcher (Styled as Custom/Presets buttons)
         self._view_stack = Adw.ViewStack()
-        
+
         switcher_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         switcher_box.add_css_class("linked")
         switcher_box.set_valign(Gtk.Align.START)
-        
+
         self._btn_custom = Gtk.ToggleButton(label="Custom")
         self._btn_presets = Gtk.ToggleButton(label="Presets")
         self._btn_presets.set_group(self._btn_custom)
-        
+
         self._btn_custom.connect("toggled", self._on_view_toggle)
         self._btn_presets.connect("toggled", self._on_view_toggle)
-        
+
         switcher_box.append(self._btn_custom)
         switcher_box.append(self._btn_presets)
         header_box.append(switcher_box)
-        
+
         # Custom Header (matches Workspace View / Keybindings aesthetic)
         self._view_stack = Adw.ViewStack()
         self._view_stack.set_vexpand(True)
-        
+
         # Tabs
         custom_widget = self._build_custom_tab()
         self._view_stack.add_named(custom_widget, "custom")
@@ -425,12 +449,14 @@ class AnimationsPage(BasePage):
 
     def _update_header(self):
         if self._active_preset_name:
-            self._active_preset_lbl.set_label(f"✨ Active preset: <b>{GLib.markup_escape_text(self._active_preset_name)}</b>")
+            self._active_preset_lbl.set_label(
+                f"✨ Active preset: <b>{GLib.markup_escape_text(self._active_preset_name)}</b>"
+            )
             self._active_preset_lbl.set_use_markup(True)
         else:
             self._active_preset_lbl.set_label("Using custom animations")
             self._active_preset_lbl.set_use_markup(False)
-        
+
         if hasattr(self, "_custom_switch_grp"):
             self._custom_switch_grp.set_visible(self._prev_anim_snapshot is not None)
 
@@ -438,9 +464,13 @@ class AnimationsPage(BasePage):
         """Return the custom animations tab (global toggles, bezier editor, and categories)."""
         if not hasattr(self, "_custom_scroll"):
             self._custom_scroll = Gtk.ScrolledWindow()
-            self._custom_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            self._custom_scroll.set_policy(
+                Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC
+            )
             self._custom_scroll.set_vexpand(True)
-            self._custom_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+            self._custom_content = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL, spacing=20
+            )
             self._custom_content.set_hexpand(True)
             self._custom_content.set_margin_start(24)
             self._custom_content.set_margin_end(24)
@@ -459,7 +489,7 @@ class AnimationsPage(BasePage):
         self._custom_switch_grp.set_hexpand(True)
         self._custom_switch_row = Adw.ActionRow(
             title="Community Preset Active",
-            subtitle="You are currently using a preset. Switch back to use your custom animation settings."
+            subtitle="You are currently using a preset. Switch back to use your custom animation settings.",
         )
         self._custom_switch_row.add_css_class("property")
         self._custom_switch_row.set_icon_name("emblem-important-symbolic")
@@ -478,10 +508,13 @@ class AnimationsPage(BasePage):
         # ── Global Settings ──────────────────────────────────────────────────
         off_grp = Adw.PreferencesGroup(
             title="Global Settings",
-            description="These apply to all animations universally."
+            description="These apply to all animations universally.",
         )
         off_grp.set_hexpand(True)
-        off_row = Adw.SwitchRow(title="Enable Animations", subtitle="Toggle all desktop animations on or off")
+        off_row = Adw.SwitchRow(
+            title="Enable Animations",
+            subtitle="Toggle all desktop animations on or off",
+        )
         off_row.set_icon_name("media-playback-start-symbolic")
         off_row.set_active(anim_node.get_child("off") is None)
         off_row.connect(
@@ -496,7 +529,8 @@ class AnimationsPage(BasePage):
         slowdown_row = Adw.SpinRow(
             title="Global Slowdown Factor",
             subtitle="Multiply all animation durations by this factor",
-            adjustment=slowdown_adj, digits=1
+            adjustment=slowdown_adj,
+            digits=1,
         )
         slowdown_row.set_icon_name("preferences-system-time-symbolic")
         slowdown_row._last_val = slowdown_val
@@ -514,7 +548,7 @@ class AnimationsPage(BasePage):
         # ── Easing Curve Editor ──────────────────────────────────────────────
         bezier_grp = Adw.PreferencesGroup(
             title="Easing Curve Editor",
-            description="Design a custom easing curve to apply to any animation below."
+            description="Design a custom easing curve to apply to any animation below.",
         )
         bezier_grp.set_hexpand(True)
 
@@ -641,7 +675,7 @@ class AnimationsPage(BasePage):
         if self._local_presets_grp is not None and hasattr(self, "_presets_content"):
             try:
                 self._presets_content.remove(self._local_presets_grp)
-            except Exception:
+            except (TypeError, ValueError):
                 pass
 
         entries = self._list_local_presets()
@@ -659,7 +693,9 @@ class AnimationsPage(BasePage):
                 title="No presets downloaded yet",
                 subtitle="Use the download button (\u2193) next to any online preset below.",
             )
-            empty_row.add_prefix(Gtk.Image.new_from_icon_name("folder-download-symbolic"))
+            empty_row.add_prefix(
+                Gtk.Image.new_from_icon_name("folder-download-symbolic")
+            )
             grp.add(empty_row)
         else:
             for entry in entries:
@@ -674,7 +710,6 @@ class AnimationsPage(BasePage):
                 self._presets_content.insert_child_after(grp, None)  # prepend
             else:
                 self._presets_content.append(grp)
-
 
     def _make_open_folder_btn(self) -> Gtk.Button:
         btn = Gtk.Button(icon_name="folder-open-symbolic")
@@ -723,10 +758,10 @@ class AnimationsPage(BasePage):
     def _confirm_apply_local_preset(self, entry: dict, row: Adw.ActionRow):
         try:
             dialog = Adw.AlertDialog(
-                heading=f"Apply \"{entry['display_name']}\"?",
+                heading=f'Apply "{entry["display_name"]}"?',
                 body=(
                     "This will fully replace your current animations block with the locally saved "
-                    f"\"{entry['display_name']}\" preset.\n\n"
+                    f'"{entry["display_name"]}" preset.\n\n'
                     "Your existing bezier curves and per-animation settings will be overwritten. "
                     "You can undo this with Ctrl+Z."
                 ),
@@ -751,7 +786,7 @@ class AnimationsPage(BasePage):
         try:
             kdl_text = entry["local_path"].read_text(encoding="utf-8")
             self._do_apply_kdl_preset(kdl_text, entry["display_name"], row)
-        except Exception as exc:
+        except OSError as exc:
             self.show_toast(f"Failed to read local preset: {exc}")
 
     def _delete_local_preset(self, entry: dict):
@@ -763,7 +798,7 @@ class AnimationsPage(BasePage):
                 parent.rmdir()
             self.show_toast(f"🗑 {entry['display_name']} deleted")
             self._refresh_local_presets_group()
-        except Exception as exc:
+        except OSError as exc:
             self.show_toast(f"Delete failed: {exc}")
 
     def _on_restore_previous(self, _btn):
@@ -774,7 +809,9 @@ class AnimationsPage(BasePage):
             snap_nodes = parse_kdl(self._prev_anim_snapshot)
             snap_anim = next((n for n in snap_nodes if n.name == "animations"), None)
             user_nodes = self._nodes
-            user_anim = next((n for n in reversed(user_nodes) if n.name == "animations"), None)
+            user_anim = next(
+                (n for n in reversed(user_nodes) if n.name == "animations"), None
+            )
             if user_anim is None:
                 user_anim = KdlNode(name="animations")
                 user_anim.leading_trivia = "\n"
@@ -793,8 +830,8 @@ class AnimationsPage(BasePage):
             self._commit("restore previous animations")
             self.show_toast("↩ Previous animations restored")
             self._update_header()
-            self._build_custom_tab() # Refresh UI components
-        except Exception as exc:
+            self._build_custom_tab()  # Refresh UI components
+        except (OSError, ValueError, IndexError, TypeError) as exc:
             self.show_toast(f"Restore failed: {exc}")
 
     def _build_preset_group(
@@ -809,6 +846,7 @@ class AnimationsPage(BasePage):
     ) -> Adw.PreferencesGroup:
         """Generic builder for a community-preset PreferencesGroup."""
         import sys
+
         mod = sys.modules[__name__]
 
         header_btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -848,7 +886,9 @@ class AnimationsPage(BasePage):
                     title="Unable to fetch presets",
                     subtitle=str(result),
                 )
-                err_row.add_prefix(Gtk.Image.new_from_icon_name("network-error-symbolic"))
+                err_row.add_prefix(
+                    Gtk.Image.new_from_icon_name("network-error-symbolic")
+                )
                 grp.add(err_row)
                 rows.append(err_row)
                 return
@@ -878,7 +918,9 @@ class AnimationsPage(BasePage):
                         title="Unable to fetch presets",
                         subtitle=str(result),
                     )
-                    err_row.add_prefix(Gtk.Image.new_from_icon_name("network-error-symbolic"))
+                    err_row.add_prefix(
+                        Gtk.Image.new_from_icon_name("network-error-symbolic")
+                    )
                     grp.add(err_row)
                     rows.append(err_row)
                     return
@@ -932,7 +974,9 @@ class AnimationsPage(BasePage):
         dl_btn.set_valign(Gtk.Align.CENTER)
         dl_btn.connect(
             "clicked",
-            lambda _b, e=entry, r=row, sl=source_label, b=dl_btn: self._download_preset_locally(e, r, sl, b),
+            lambda _b, e=entry, r=row, sl=source_label, b=dl_btn: (
+                self._download_preset_locally(e, r, sl, b)
+            ),
         )
         row.add_suffix(dl_btn)
 
@@ -943,7 +987,9 @@ class AnimationsPage(BasePage):
         apply_btn.set_valign(Gtk.Align.CENTER)
         apply_btn.connect(
             "clicked",
-            lambda _b, e=entry, r=row, sl=source_label: self._confirm_apply_preset(e, r, sl),
+            lambda _b, e=entry, r=row, sl=source_label: self._confirm_apply_preset(
+                e, r, sl
+            ),
         )
         row.add_suffix(apply_btn)
 
@@ -966,7 +1012,7 @@ class AnimationsPage(BasePage):
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     kdl_bytes = resp.read()
                 GLib.idle_add(_on_done, kdl_bytes, None)
-            except Exception as exc:
+            except urllib.error.URLError as exc:
                 GLib.idle_add(_on_done, None, exc)
 
         def _on_done(kdl_bytes, error):
@@ -983,19 +1029,18 @@ class AnimationsPage(BasePage):
                 dl_btn.set_tooltip_text("Already downloaded")
                 dl_btn.set_sensitive(False)
                 self._refresh_local_presets_group()
-            except Exception as exc:
+            except OSError as exc:
                 self.show_toast(f"Save failed: {exc}")
 
         threading.Thread(target=_worker, daemon=True).start()
 
-
     def _confirm_apply_preset(self, entry, row, source_label="community"):
         try:
             dialog = Adw.AlertDialog(
-                heading=f"Apply \"{entry['display_name']}\"?",
+                heading=f'Apply "{entry["display_name"]}"?',
                 body=(
                     "This will fully replace your current animations block with the "
-                    f"\"{entry['display_name']}\" preset from {source_label}.\n\n"
+                    f'"{entry["display_name"]}" preset from {source_label}.\n\n'
                     "Your existing bezier curves and per-animation settings will be overwritten. "
                     "You can undo this with Ctrl+Z."
                 ),
@@ -1015,7 +1060,6 @@ class AnimationsPage(BasePage):
         except AttributeError:
             self._apply_nirimation_preset(entry, row)
 
-
     def _apply_nirimation_preset(self, entry, row):
         row.set_sensitive(False)
         self.show_toast(f"Downloading {entry['display_name']}...", timeout=5)
@@ -1029,7 +1073,7 @@ class AnimationsPage(BasePage):
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     kdl_text = resp.read().decode()
                 GLib.idle_add(_on_downloaded, kdl_text, None)
-            except Exception as exc:
+            except urllib.error.URLError as exc:
                 GLib.idle_add(_on_downloaded, None, exc)
 
         def _on_downloaded(kdl_text, error):
@@ -1056,9 +1100,9 @@ class AnimationsPage(BasePage):
                 (n for n in reversed(user_nodes) if n.name == "animations"), None
             )
 
-
             if self._prev_anim_snapshot is None:
                 from nirimod.kdl_parser import write_kdl
+
                 if user_anim is not None:
                     snap_node = KdlNode(name="animations")
                     snap_node.children = list(user_anim.children)
@@ -1082,7 +1126,7 @@ class AnimationsPage(BasePage):
             self._commit(f"preset: {display_name}")
             self._update_header()
             self.show_toast(f"\u2728 {display_name} preset applied!")
-        except Exception as exc:
+        except (OSError, ValueError, IndexError, TypeError) as exc:
             self.show_toast(f"Error applying preset: {exc}")
 
     def _apply_preset(self, curve: tuple, name: str):
@@ -1132,7 +1176,7 @@ class AnimationsPage(BasePage):
         apply_btn = Gtk.Button(label="Apply Editor Curve")
         apply_btn.add_css_class("flat")
         apply_btn.set_valign(Gtk.Align.CENTER)
-        
+
         # Determine current curve for subtitle
 
         curve_node = an.get_child("curve") if an else None
@@ -1146,8 +1190,12 @@ class AnimationsPage(BasePage):
         elif easing and easing.args:
             current_curve = str(easing.args[0])
 
-        apply_row = Adw.ActionRow(title="Easing Curve", subtitle=current_curve if current_curve else "Default")
-        apply_btn.connect("clicked", lambda *_, k=key, ar=apply_row: self._apply_bezier_to_anim(k, ar))
+        apply_row = Adw.ActionRow(
+            title="Easing Curve", subtitle=current_curve if current_curve else "Default"
+        )
+        apply_btn.connect(
+            "clicked", lambda *_, k=key, ar=apply_row: self._apply_bezier_to_anim(k, ar)
+        )
         apply_row.add_suffix(apply_btn)
         grp.add_row(apply_row)
 
@@ -1184,11 +1232,12 @@ class AnimationsPage(BasePage):
         if an is None:
             an = KdlNode(anim_key)
             anim.children.append(an)
-            
+
         if prop == "duration-ms":
             from nirimod.kdl_parser import remove_child
+
             remove_child(an, "spring")
-            
+
         set_child_arg(an, prop, value)
         self._commit(f"animation {anim_key} {prop}")
 
@@ -1206,13 +1255,20 @@ class AnimationsPage(BasePage):
             an.children.remove(old_easing)
 
         from nirimod.kdl_parser import remove_child
+
         remove_child(an, "spring")
 
         curve_node = an.get_child("curve")
         if curve_node is None:
             curve_node = KdlNode("curve")
             an.children.append(curve_node)
-        curve_node.args = ["cubic-bezier", round(x1, 3), round(y1, 3), round(x2, 3), round(y2, 3)]
+        curve_node.args = [
+            "cubic-bezier",
+            round(x1, 3),
+            round(y1, 3),
+            round(x2, 3),
+            round(y2, 3),
+        ]
 
         curve_str = f"{x1:.3f} {y1:.3f} {x2:.3f} {y2:.3f}"
         self._commit(f"animation {anim_key} bezier")

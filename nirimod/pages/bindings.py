@@ -146,7 +146,7 @@ def _write_binds_to_node(binds_list: list[dict], binds_node: KdlNode):
     for orig_child in binds_node.children:
         if id(orig_child) not in kept_nodes:
             salvaged_trivia += orig_child.leading_trivia
-            
+
     new_children = []
     for i, b in enumerate(binds_list):
         child = b.get("_node")
@@ -155,11 +155,11 @@ def _write_binds_to_node(binds_list: list[dict], binds_node: KdlNode):
             child.leading_trivia = "\n    "
         else:
             child.name = b["keysym"]
-            
+
         if i == 0 and salvaged_trivia:
             child.leading_trivia = salvaged_trivia + child.leading_trivia
             salvaged_trivia = ""
-            
+
         child.props.clear()
         if b["allow_when_locked"]:
             child.props["allow-when-locked"] = True
@@ -167,14 +167,14 @@ def _write_binds_to_node(binds_list: list[dict], binds_node: KdlNode):
             child.props["repeat"] = False
         for k, v in b.get("extra_props", {}).items():
             child.props[k] = v
-            
+
         if b["action"]:
             args = b.get("action_args") or []
             if not args:
                 legacy = b.get("action_arg", "")
                 if legacy:
                     args = [legacy]
-            
+
             if child.children:
                 action_node = child.children[0]
                 action_node.name = b["action"]
@@ -187,12 +187,14 @@ def _write_binds_to_node(binds_list: list[dict], binds_node: KdlNode):
                 child.children.append(action_node)
         else:
             child.children.clear()
-            
+
         new_children.append(child)
-        
+
     if salvaged_trivia:
-        binds_node.children_trailing_trivia = salvaged_trivia + binds_node.children_trailing_trivia
-        
+        binds_node.children_trailing_trivia = (
+            salvaged_trivia + binds_node.children_trailing_trivia
+        )
+
     binds_node.children = new_children
 
 
@@ -235,7 +237,7 @@ class BindingsPage(BasePage):
         # Title/Subtitle Group
         title_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         title_vbox.set_hexpand(True)
-        
+
         self._main_title = Gtk.Label(label="Keybindings")
         self._main_title.set_xalign(0.0)
         self._main_title.add_css_class("title-1")
@@ -251,26 +253,26 @@ class BindingsPage(BasePage):
         # Layout Selector (shown only on Keyboard tab)
         from nirimod import app_settings
         from nirimod.xkb_helper import XkbHelper
-        
+
         self._layouts = XkbHelper.get_available_layouts()
         layout_names = [d for _, d in self._layouts]
         self._layout_model = Gtk.StringList.new(layout_names)
         self._layout_combo = Gtk.DropDown(model=self._layout_model)
         self._layout_combo.set_valign(Gtk.Align.CENTER)
         self._layout_combo.set_enable_search(True)
-        
+
         # Priority: Settings > Niri Config > US
         saved_layout = app_settings.get("kb_layout")
         if not saved_layout:
             saved_layout = self._get_current_niri_layout() or "us"
-            
+
         selected_idx = 0
         for i, (lid, _) in enumerate(self._layouts):
             if lid == saved_layout:
                 selected_idx = i
                 break
         self._layout_combo.set_selected(selected_idx)
-            
+
         self._layout_combo.connect("notify::selected", self._on_layout_changed)
         header_box.append(self._layout_combo)
 
@@ -286,22 +288,22 @@ class BindingsPage(BasePage):
 
         # View Switcher (Styled as Physical/List View buttons)
         self._view_stack = Adw.ViewStack()
-        
+
         switcher_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         switcher_box.add_css_class("linked")
         switcher_box.set_valign(Gtk.Align.CENTER)
-        
+
         self._btn_physical = Gtk.ToggleButton(label="Physical")
         self._btn_list = Gtk.ToggleButton(label="List View")
         self._btn_list.set_group(self._btn_physical)
-        
+
         self._btn_physical.connect("toggled", self._on_view_toggle)
         self._btn_list.connect("toggled", self._on_view_toggle)
-        
+
         switcher_box.append(self._btn_physical)
         switcher_box.append(self._btn_list)
         header_box.append(switcher_box)
-        
+
         self._view_stack.set_vexpand(True)
         list_page_widget = self._build_list_tab()
         self._view_stack.add_named(list_page_widget, "list")
@@ -326,6 +328,7 @@ class BindingsPage(BasePage):
     def _get_current_niri_layout(self):
         try:
             from nirimod import kdl_parser
+
             nodes = kdl_parser.load_niri_config()
             for node in nodes:
                 if node.name == "input":
@@ -343,6 +346,7 @@ class BindingsPage(BasePage):
 
     def _on_layout_changed(self, dropdown, param):
         from nirimod import app_settings
+
         idx = dropdown.get_selected()
         if idx < len(self._layouts):
             layout_id = self._layouts[idx][0]
@@ -392,7 +396,6 @@ class BindingsPage(BasePage):
         self._flowbox.set_homogeneous(True)
         content.append(self._flowbox)
 
-
         return scroll
 
     def _build_keyboard_tab(self) -> Gtk.Widget:
@@ -432,8 +435,6 @@ class BindingsPage(BasePage):
 
     # Tab switching
 
-
-
     # Refresh / sync
 
     def refresh(self):
@@ -448,18 +449,17 @@ class BindingsPage(BasePage):
         if self._viz is None:
             return
         from nirimod import app_settings
+
         layout_id = app_settings.get("kb_layout")
         if not layout_id:
             layout_id = self._get_current_niri_layout() or "us"
         self._viz.set_layout(layout_id)
-        
+
         binds_map = _build_key_bindings_map(self._binds, self._viz)
         self._viz.set_bindings(binds_map)
         self._viz.set_search(self._kb_search_query)
         n_total = len(self._binds)
-        self._kb_stats_header.set_label(
-            f"{n_total} active bindings detected"
-        )
+        self._kb_stats_header.set_label(f"{n_total} active bindings detected")
 
     # List editor helpers (unchanged from original)
 
@@ -521,7 +521,7 @@ class BindingsPage(BasePage):
             cap = Gtk.Label(label=label_text)
             cap.add_css_class("nm-keycap-purple")
             keys_box.append(cap)
-            
+
             if i < len(parts) - 1:
                 plus = Gtk.Label(label="+")
                 plus.add_css_class("dim-label")
@@ -612,7 +612,7 @@ class BindingsPage(BasePage):
             "action_args": [],
             "allow_when_locked": False,
             "repeat": True,
-            "extra_props": {}
+            "extra_props": {},
         }
         self._show_bind_dialog(new_bind, -1)
 
@@ -716,6 +716,7 @@ class BindingsPage(BasePage):
                 new_args = [arg_text] if arg_text else []
             else:
                 import shlex
+
                 try:
                     new_args = shlex.split(arg_text) if arg_text else []
                 except ValueError:

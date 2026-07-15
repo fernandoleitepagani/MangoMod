@@ -18,9 +18,9 @@ from nirimod.kdl_parser import (
 from nirimod.pages.base import BasePage
 
 _CORNERS = [
-    ("top-left",     "Top-Left",     "Moves cursor to the top-left corner"),
-    ("top-right",    "Top-Right",    "Moves cursor to the top-right corner"),
-    ("bottom-left",  "Bottom-Left",  "Moves cursor to the bottom-left corner"),
+    ("top-left", "Top-Left", "Moves cursor to the top-left corner"),
+    ("top-right", "Top-Right", "Moves cursor to the top-right corner"),
+    ("bottom-left", "Bottom-Left", "Moves cursor to the bottom-left corner"),
     ("bottom-right", "Bottom-Right", "Moves cursor to the bottom-right corner"),
 ]
 
@@ -69,7 +69,8 @@ class GesturesPage(BasePage):
             is_active = corner_key in active_corners
             sr.set_active(is_active)
             safe_switch_connect(
-                sr, is_active,
+                sr,
+                is_active,
                 lambda enabled, k=corner_key: self._set_corner(k, enabled),
             )
             hc_expander.add_row(sr)
@@ -88,7 +89,6 @@ class GesturesPage(BasePage):
 
         hc_grp.add(hc_expander)
         content.append(hc_grp)
-
 
         # ── Hotkey Overlay ────────────────────────────────────────────────────
         hko_grp = Adw.PreferencesGroup(title="Hotkey Overlay")

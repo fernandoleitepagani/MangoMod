@@ -216,9 +216,7 @@ class AppearancePage(BasePage):
         passes_adj = Gtk.Adjustment(
             value=passes_val, lower=0, upper=10, step_increment=1
         )
-        passes_row = Adw.SpinRow(
-            title="Passes", adjustment=passes_adj, digits=0
-        )
+        passes_row = Adw.SpinRow(title="Passes", adjustment=passes_adj, digits=0)
 
         passes_row._last_val = passes_val
 
@@ -265,7 +263,9 @@ class AppearancePage(BasePage):
         noise_row.connect("notify::value", _on_noise_changed)
         blur_grp.add(noise_row)
 
-        saturation_val = float(blur_node.child_arg("saturation", 1.0) if blur_node else 1.0)
+        saturation_val = float(
+            blur_node.child_arg("saturation", 1.0) if blur_node else 1.0
+        )
         saturation_adj = Gtk.Adjustment(
             value=saturation_val, lower=0.0, upper=5.0, step_increment=0.1
         )

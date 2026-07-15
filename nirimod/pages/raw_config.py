@@ -88,7 +88,6 @@ class RawConfigPage(BasePage):
         self.refresh()
         return tb
 
-
     # Scroll position helpers
 
     def _save_scroll_position(self):
@@ -116,7 +115,6 @@ class RawConfigPage(BasePage):
 
         # Defer one frame so the buffer is fully laid out before scrolling
         GLib.idle_add(_apply)
-
 
     # Page lifecycle
 
@@ -146,7 +144,6 @@ class RawConfigPage(BasePage):
     def _reload_from_disk(self):
         """Re-read the file from disk, discarding any edits."""
         self._load_selected_file(force=True)
-
 
     # File loading
 
@@ -178,12 +175,11 @@ class RawConfigPage(BasePage):
         self._set_modified(False)
         self._restore_scroll_position(path)
 
-
     # Buffer modification tracking
 
     def _on_buffer_changed(self, buf):
         text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
-        is_changed = (text != self._original_text)
+        is_changed = text != self._original_text
         if is_changed != self._buffer_modified:
             self._set_modified(is_changed)
 
@@ -191,7 +187,6 @@ class RawConfigPage(BasePage):
         self._buffer_modified = modified
         self._save_btn.set_sensitive(modified)
         self._discard_btn.set_sensitive(modified)
-
 
     # Save / Discard
 
@@ -201,11 +196,15 @@ class RawConfigPage(BasePage):
             return
 
         path = self._current_files[idx]
-        text = self._buf.get_text(self._buf.get_start_iter(), self._buf.get_end_iter(), False)
+        text = self._buf.get_text(
+            self._buf.get_start_iter(), self._buf.get_end_iter(), False
+        )
 
         from nirimod import app_settings
+
         if app_settings.get("auto_backup", True):
             from nirimod.backup import backup_all_sources
+
             limit = app_settings.get("backup_limit", 10)
             backup_all_sources(self._win.app_state.source_files, limit=limit)
 
@@ -253,6 +252,7 @@ class RawConfigPage(BasePage):
 
     def _confirm_discard_then(self, callback):
         import gi
+
         gi.require_version("Adw", "1")
         from gi.repository import Adw
 
@@ -272,7 +272,6 @@ class RawConfigPage(BasePage):
 
         dialog.connect("response", _on_response)
         dialog.present(self._win)
-
 
     # Syntax highlighting
 
@@ -305,10 +304,7 @@ class RawConfigPage(BasePage):
         _apply(r"\b(true|false|null)\b", keyword_tag)
         _apply(r"^(\s*)([a-zA-Z][\w\-]*)", node_tag, group=2)
 
-
     # Copy / Validate
-
-
 
     def _on_validate(self, *_):
         self.show_toast("Validating...")

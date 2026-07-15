@@ -90,7 +90,7 @@ class OutputsPage(BasePage):
         drag.connect("drag-update", self._on_drag_update)
         drag.connect("drag-end", self._on_drag_end)
         self._canvas.add_controller(drag)
-        
+
         click = Gtk.GestureClick()
         click.connect("pressed", self._on_canvas_click)
         self._canvas.add_controller(click)
@@ -115,7 +115,11 @@ class OutputsPage(BasePage):
             if not name:
                 continue
             out_node = next(
-                (n for n in self._nodes if n.name == "output" and n.args and n.args[0] == name),
+                (
+                    n
+                    for n in self._nodes
+                    if n.name == "output" and n.args and n.args[0] == name
+                ),
                 None,
             )
             if out_node is None:
@@ -144,7 +148,11 @@ class OutputsPage(BasePage):
             if mode_idx is not None:
                 o["current_mode"] = mode_idx
 
-            m = modes[mode_idx] if isinstance(mode_idx, int) and 0 <= mode_idx < len(modes) else {}
+            m = (
+                modes[mode_idx]
+                if isinstance(mode_idx, int) and 0 <= mode_idx < len(modes)
+                else {}
+            )
             pw = m.get("width", 1920)
             ph = m.get("height", 1080)
 
@@ -393,7 +401,11 @@ class OutputsPage(BasePage):
         pixel_w = mode.get("width", 1920)
         pixel_h = mode.get("height", 1080)
 
-        transform = str((drag_o.get("logical") or {}).get("transform", "normal")).lower().replace("_", "-")
+        transform = (
+            str((drag_o.get("logical") or {}).get("transform", "normal"))
+            .lower()
+            .replace("_", "-")
+        )
         if transform in ["90", "270", "flipped-90", "flipped-270"]:
             pixel_w, pixel_h = pixel_h, pixel_w
 
@@ -407,9 +419,9 @@ class OutputsPage(BasePage):
         closest_x = SNAP_THRESHOLD + 1
         closest_y = SNAP_THRESHOLD + 1
 
-        dragged_left   = new_lx
-        dragged_right  = new_lx + logical_w
-        dragged_top    = new_ly
+        dragged_left = new_lx
+        dragged_right = new_lx + logical_w
+        dragged_top = new_ly
         dragged_bottom = new_ly + logical_h
 
         for other in self._outputs:
@@ -423,20 +435,27 @@ class OutputsPage(BasePage):
             other_scale = other_pos.get("scale", 1.0)
             other_mode_idx = other.get("current_mode")
             other_modes = other.get("modes", [])
-            other_mode = other_modes[other_mode_idx] if isinstance(other_mode_idx, int) and 0 <= other_mode_idx < len(other_modes) else {}
+            other_mode = (
+                other_modes[other_mode_idx]
+                if isinstance(other_mode_idx, int)
+                and 0 <= other_mode_idx < len(other_modes)
+                else {}
+            )
             other_pixel_w = other_mode.get("width", 1920)
             other_pixel_h = other_mode.get("height", 1080)
 
-            other_transform = str(other_pos.get("transform", "normal")).lower().replace("_", "-")
+            other_transform = (
+                str(other_pos.get("transform", "normal")).lower().replace("_", "-")
+            )
             if other_transform in ["90", "270", "flipped-90", "flipped-270"]:
                 other_pixel_w, other_pixel_h = other_pixel_h, other_pixel_w
 
             other_logical_w = other_pixel_w / other_scale
             other_logical_h = other_pixel_h / other_scale
 
-            other_left   = other_x
-            other_right  = other_x + other_logical_w
-            other_top    = other_y
+            other_left = other_x
+            other_right = other_x + other_logical_w
+            other_top = other_y
             other_bottom = other_y + other_logical_h
 
             vertical_spans_are_near = not (
@@ -519,17 +538,17 @@ class OutputsPage(BasePage):
     def _on_canvas_click(self, gesture, n_press, x, y):
         if not hasattr(self, "_canvas_scale"):
             return
-            
+
         scale = self._canvas_scale
         ox, oy = self._canvas_offset
-        
+
         for i, o in reversed(list(enumerate(self._outputs))):
             pos = o.get("logical") or {}
             mx = ox + pos.get("x", 0) * scale
             my = oy + pos.get("y", 0) * scale
             mw = pos.get("width", 1920) * scale
             mh = pos.get("height", 1080) * scale
-            
+
             if mx <= x <= mx + mw and my <= y <= my + mh:
                 self._out_combo.set_selected(i)
                 return
@@ -629,8 +648,12 @@ class OutputsPage(BasePage):
 
         px = (output.get("logical") or {}).get("x", 0)
         py = (output.get("logical") or {}).get("y", 0)
-        px_adj = Gtk.Adjustment(value=px, lower=-1000000, upper=1000000, step_increment=1)
-        py_adj = Gtk.Adjustment(value=py, lower=-1000000, upper=1000000, step_increment=1)
+        px_adj = Gtk.Adjustment(
+            value=px, lower=-1000000, upper=1000000, step_increment=1
+        )
+        py_adj = Gtk.Adjustment(
+            value=py, lower=-1000000, upper=1000000, step_increment=1
+        )
         self._pos_x_adj = px_adj
         self._pos_y_adj = py_adj
         pos_x_row = Adw.SpinRow(title="Position X", adjustment=px_adj, digits=0)
@@ -733,7 +756,9 @@ class OutputsPage(BasePage):
                     mode_str = f"{m.get('width', 0)}x{m.get('height', 0)}@{m.get('refresh_rate', 0) / 1000:.3f}"
                     set_child_arg(out_node, "mode", mode_str)
             if out_node.get_child("scale") is None:
-                set_child_arg(out_node, "scale", (o.get("logical") or {}).get("scale", 1.0))
+                set_child_arg(
+                    out_node, "scale", (o.get("logical") or {}).get("scale", 1.0)
+                )
             if out_node.get_child("transform") is None:
                 t = (o.get("logical") or {}).get("transform", "normal")
                 t = str(t).lower().replace("_", "-") if t else "normal"
@@ -813,7 +838,7 @@ class OutputsPage(BasePage):
     def _set_output_prop(self, name: str, prop: str, value):
         if prop == "scale" and isinstance(value, float):
             value = round(value, 3)
-            
+
         out_node = self._get_or_create_out_node(name)
         set_child_arg(out_node, prop, value)
 
