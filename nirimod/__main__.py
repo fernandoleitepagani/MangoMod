@@ -53,7 +53,6 @@ class NiriModApp(Adw.Application):
         GLib.set_application_name("NiriMod")
         GLib.set_prgname("nirimod")
 
-
         # Prefer dark theme globally via libadwaita
         style_manager = Adw.StyleManager.get_default()
         style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
@@ -63,9 +62,10 @@ class NiriModApp(Adw.Application):
         if win is None:
             from nirimod import app_settings
             from nirimod.kdl_parser import set_paths
+
             set_paths(
                 config_path=app_settings.get("config_path", ""),
-                backup_path=app_settings.get("backup_path", "")
+                backup_path=app_settings.get("backup_path", ""),
             )
             win = NiriModWindow(application=self)
         win.present()

@@ -20,28 +20,47 @@ from nirimod.theme import CSS
 
 # Grouped sidebar structure: (section_title, [(page_id, icon, label), ...])
 SIDEBAR_GROUPS = [
-    ("Input", [
-        ("input", "input-keyboard-symbolic", "Input"),
-        ("bindings", "preferences-desktop-keyboard-shortcuts-symbolic", "Key Bindings"),
-    ]),
-    ("Display", [
-        ("outputs", "video-display-symbolic", "Outputs"),
-        ("appearance", "preferences-desktop-appearance-symbolic", "Appearance"),
-        ("animations", "applications-multimedia-symbolic", "Animations"),
-    ]),
-    ("Workspace", [
-        ("layout", "view-grid-symbolic", "Layout"),
-        ("workspaces", "view-paged-symbolic", "Workspaces"),
-        ("window_rules", "preferences-system-symbolic", "Window Rules"),
-    ]),
-    ("System", [
-        ("startup", "system-run-symbolic", "Startup"),
-        ("environment", "preferences-other-symbolic", "Environment"),
-        ("gestures", "input-touchpad-symbolic", "Gestures & Misc"),
-    ]),
-    ("Advanced", [
-        ("raw_config", "text-x-generic-symbolic", "Raw Config"),
-    ]),
+    (
+        "Input",
+        [
+            ("input", "input-keyboard-symbolic", "Input"),
+            (
+                "bindings",
+                "preferences-desktop-keyboard-shortcuts-symbolic",
+                "Key Bindings",
+            ),
+        ],
+    ),
+    (
+        "Display",
+        [
+            ("outputs", "video-display-symbolic", "Outputs"),
+            ("appearance", "preferences-desktop-appearance-symbolic", "Appearance"),
+            ("animations", "applications-multimedia-symbolic", "Animations"),
+        ],
+    ),
+    (
+        "Workspace",
+        [
+            ("layout", "view-grid-symbolic", "Layout"),
+            ("workspaces", "view-paged-symbolic", "Workspaces"),
+            ("window_rules", "preferences-system-symbolic", "Window Rules"),
+        ],
+    ),
+    (
+        "System",
+        [
+            ("startup", "system-run-symbolic", "Startup"),
+            ("environment", "preferences-other-symbolic", "Environment"),
+            ("gestures", "input-touchpad-symbolic", "Gestures & Misc"),
+        ],
+    ),
+    (
+        "Advanced",
+        [
+            ("raw_config", "text-x-generic-symbolic", "Raw Config"),
+        ],
+    ),
 ]
 
 # Flat list for backward compat (select_page, search index, etc.)
@@ -61,7 +80,6 @@ class NiriModWindow(Adw.ApplicationWindow):
         self._pages: dict[str, Gtk.Widget] = {}
         self._sidebar_rows: dict[str, Gtk.ListBoxRow] = {}
         self._sidebar_listboxes: dict[str, Gtk.ListBox] = {}
-
 
         self._load_css()
         self._build_ui()
@@ -137,7 +155,6 @@ class NiriModWindow(Adw.ApplicationWindow):
         self._search_entry.add_controller(key_ctrl)
         sidebar_box.append(self._search_entry)
 
-
         self._search_revealer = Gtk.Revealer()
         self._search_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
         self._search_revealer.set_transition_duration(120)
@@ -153,7 +170,9 @@ class NiriModWindow(Adw.ApplicationWindow):
         self._search_results_listbox = Gtk.ListBox()
         self._search_results_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self._search_results_listbox.add_css_class("nm-search-results")
-        self._search_results_listbox.connect("row-activated", self._on_search_result_activated)
+        self._search_results_listbox.connect(
+            "row-activated", self._on_search_result_activated
+        )
         results_scroll.set_child(self._search_results_listbox)
         self._search_revealer.set_child(results_scroll)
         sidebar_box.append(self._search_revealer)
@@ -218,8 +237,6 @@ class NiriModWindow(Adw.ApplicationWindow):
         text_lbl.set_hexpand(True)
         box.append(text_lbl)
 
-
-
         row.set_child(box)
         return row
 
@@ -233,7 +250,6 @@ class NiriModWindow(Adw.ApplicationWindow):
         self._stack.set_transition_duration(120)
         self._stack.set_vexpand(True)
         content_root.append(self._stack)
-
 
         self._build_all_pages()
         self._build_search_index()
@@ -330,7 +346,6 @@ class NiriModWindow(Adw.ApplicationWindow):
             return
         pid = getattr(row, "page_id", None)
         if pid:
-
             for other_pid, lb in self._sidebar_listboxes.items():
                 if lb is not _lb:
                     lb.unselect_all()
@@ -350,7 +365,6 @@ class NiriModWindow(Adw.ApplicationWindow):
                 if pid == page_id:
                     lb.select_row(row)
 
-
         # Notify page of visibility
         page = self._pages.get(page_id)
         if page and hasattr(page, "on_shown"):
@@ -364,26 +378,31 @@ class NiriModWindow(Adw.ApplicationWindow):
             if isinstance(widget, Adw.PreferencesRow):
                 title = widget.get_title()
                 if title:
-                    subtitle = widget.get_subtitle() if hasattr(widget, "get_subtitle") else ""
-                    self._search_index.append({
-                        "page_id": pid,
-                        "page_title": p_title,
-                        "title": title,
-                        "subtitle": subtitle,
-                        "widget": widget,
-                    })
-
+                    subtitle = (
+                        widget.get_subtitle() if hasattr(widget, "get_subtitle") else ""
+                    )
+                    self._search_index.append(
+                        {
+                            "page_id": pid,
+                            "page_title": p_title,
+                            "title": title,
+                            "subtitle": subtitle,
+                            "widget": widget,
+                        }
+                    )
 
             if isinstance(widget, Adw.PreferencesGroup):
                 title = widget.get_title()
                 if title:
-                    self._search_index.append({
-                        "page_id": pid,
-                        "page_title": p_title,
-                        "title": title,
-                        "subtitle": "(Group)",
-                        "widget": widget,
-                    })
+                    self._search_index.append(
+                        {
+                            "page_id": pid,
+                            "page_title": p_title,
+                            "title": title,
+                            "subtitle": "(Group)",
+                            "widget": widget,
+                        }
+                    )
 
             # Recurse into all children to find nested elements
             child = widget.get_first_child()
@@ -403,7 +422,8 @@ class NiriModWindow(Adw.ApplicationWindow):
             return
 
         matches = [
-            r for r in self._search_index
+            r
+            for r in self._search_index
             if query in r["title"].lower()
             or query in r["subtitle"].lower()
             or query in r["page_title"].lower()
@@ -523,7 +543,9 @@ class NiriModWindow(Adw.ApplicationWindow):
         self.add_action(open_prefs_action)
 
         reset_config_action = Gio.SimpleAction.new("reset_config", None)
-        reset_config_action.connect("activate", lambda *_: self._on_reset_config_clicked())
+        reset_config_action.connect(
+            "activate", lambda *_: self._on_reset_config_clicked()
+        )
         self.add_action(reset_config_action)
 
         open_kofi_action = Gio.SimpleAction.new("open_kofi", None)
@@ -561,8 +583,10 @@ class NiriModWindow(Adw.ApplicationWindow):
 
     def _on_save(self):
         from nirimod import app_settings
+
         if app_settings.get("auto_backup", True):
             from nirimod.backup import backup_all_sources
+
             limit = app_settings.get("backup_limit", 10)
             backup_all_sources(self.app_state.source_files, limit=limit)
 
@@ -603,9 +627,7 @@ class NiriModWindow(Adw.ApplicationWindow):
                     return
                 niri_ipc.run_in_thread(niri_ipc.load_config_file, _finish_save)
 
-            niri_ipc.run_in_thread(
-                lambda: niri_ipc.validate_config(), _on_validated
-            )
+            niri_ipc.run_in_thread(lambda: niri_ipc.validate_config(), _on_validated)
         else:
             tmp_kdl = kdl_parser.NIRI_CONFIG.with_name(".config.kdl.tmp")
             self.app_state.write_to_path(tmp_kdl)
@@ -681,18 +703,29 @@ class NiriModWindow(Adw.ApplicationWindow):
         toast = Adw.Toast(title=message, timeout=timeout)
         if copy_text is not None:
             toast.set_button_label("Copy")
-            toast.connect("button-clicked", lambda *_: self.get_clipboard().set(copy_text))
+            toast.connect(
+                "button-clicked", lambda *_: self.get_clipboard().set(copy_text)
+            )
         elif "error" in message.lower() or "failed" in message.lower():
             toast.set_button_label("Copy")
-            toast.connect("button-clicked", lambda *_: self.get_clipboard().set(message))
+            toast.connect(
+                "button-clicked", lambda *_: self.get_clipboard().set(message)
+            )
 
         self._toast_overlay.add_toast(toast)
 
     def _get_baseline_dir(self):
         from pathlib import Path
+
         path_str = str(kdl_parser.NIRI_CONFIG.resolve())
         path_hash = hashlib.md5(path_str.encode()).hexdigest()[:8]
-        return Path.home() / ".config" / "nirimod" / "baseline" / f"{kdl_parser.NIRI_CONFIG.name}_{path_hash}"
+        return (
+            Path.home()
+            / ".config"
+            / "nirimod"
+            / "baseline"
+            / f"{kdl_parser.NIRI_CONFIG.name}_{path_hash}"
+        )
 
     def _check_onboarding(self):
         baseline_dir = self._get_baseline_dir()
@@ -756,6 +789,7 @@ class NiriModWindow(Adw.ApplicationWindow):
 
     def _check_for_updates(self):
         from nirimod import app_settings, updater
+
         if app_settings.get("auto_update", True):
             updater.check_for_updates(self._on_update_check_result)
 
@@ -775,10 +809,12 @@ class NiriModWindow(Adw.ApplicationWindow):
         def _on_response(dlg, response):
             if response == "update":
                 from nirimod import updater
+
                 updater.launch_updater_in_terminal()
                 app = self.get_application()
                 if app:
                     app.quit()
+
         dialog.connect("response", _on_response)
         dialog.present(self)
 
@@ -809,12 +845,14 @@ class NiriModWindow(Adw.ApplicationWindow):
             for p in kdl_parser.BACKUP_DIR.iterdir():
                 if p.is_dir():
                     backups.append((p.stat().st_mtime, p, p.name))
-        
+
         backups.sort(key=lambda x: x[0], reverse=True)
-        
+
         if baseline_dir.exists():
-            backups.append((baseline_dir.stat().st_mtime, baseline_dir, "Original Baseline"))
-            
+            backups.append(
+                (baseline_dir.stat().st_mtime, baseline_dir, "Original Baseline")
+            )
+
         if not backups:
             self.show_toast("No backups available to restore.")
             return
@@ -828,22 +866,24 @@ class NiriModWindow(Adw.ApplicationWindow):
         page = Adw.PreferencesPage()
         grp = Adw.PreferencesGroup(
             title="Available Backups",
-            description="Select a backup to restore your configuration from."
+            description="Select a backup to restore your configuration from.",
         )
 
         for _, path, name in backups:
             row = Adw.ActionRow(title=name)
             if name == "Original Baseline":
                 row.set_subtitle("Taken on first launch")
-                
+
             restore_btn = Gtk.Button(label="Restore")
             restore_btn.set_valign(Gtk.Align.CENTER)
             restore_btn.add_css_class("flat")
             restore_btn.add_css_class("suggested-action")
-            restore_btn.connect("clicked", lambda _b, p=path: self._confirm_restore(p, prefs_win))
+            restore_btn.connect(
+                "clicked", lambda _b, p=path: self._confirm_restore(p, prefs_win)
+            )
             row.add_suffix(restore_btn)
             grp.add(row)
-            
+
         page.add(grp)
         prefs_win.add(page)
         prefs_win.present()
@@ -852,17 +892,24 @@ class NiriModWindow(Adw.ApplicationWindow):
         parent_dialog.close()
         dialog = Adw.AlertDialog(
             heading="Confirm Restore",
-            body="Your current configuration will be replaced by this backup. You may want to manually save your current work first."
+            body="Your current configuration will be replaced by this backup. You may want to manually save your current work first.",
         )
         dialog.add_response("cancel", "Cancel")
         dialog.add_response("restore", "Restore")
         dialog.set_response_appearance("restore", Adw.ResponseAppearance.DESTRUCTIVE)
-        dialog.connect("response", lambda dlg, r: self._perform_restore(backup_dir) if r == "restore" else None)
+        dialog.connect(
+            "response",
+            lambda dlg, r: (
+                self._perform_restore(backup_dir) if r == "restore" else None
+            ),
+        )
         dialog.present(self)
 
     def _perform_restore(self, backup_dir):
         try:
-            shutil.copytree(backup_dir, kdl_parser.NIRI_CONFIG.parent, dirs_exist_ok=True)
+            shutil.copytree(
+                backup_dir, kdl_parser.NIRI_CONFIG.parent, dirs_exist_ok=True
+            )
             self.app_state.reload_from_disk()
             self.notify_nodes_changed()
             self.mark_clean()
@@ -879,9 +926,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         prefs_win.set_transient_for(self)
         prefs_win.set_default_size(500, 400)
 
-        page = Adw.PreferencesPage(
-            title="General", icon_name="emblem-system-symbolic"
-        )
+        page = Adw.PreferencesPage(title="General", icon_name="emblem-system-symbolic")
 
         updates_grp = Adw.PreferencesGroup(
             title="Updates",
@@ -907,11 +952,15 @@ class NiriModWindow(Adw.ApplicationWindow):
 
         config_path_row = Adw.ActionRow(title="Config Path")
         current_path = app_settings.get("config_path", "")
-        config_path_row.set_subtitle(current_path if current_path else "Default (~/.config/niri/config.kdl)")
-        
+        config_path_row.set_subtitle(
+            current_path if current_path else "Default (~/.config/niri/config.kdl)"
+        )
+
         browse_btn = Gtk.Button(label="Browse...")
         browse_btn.set_valign(Gtk.Align.CENTER)
-        browse_btn.connect("clicked", lambda _b: self._on_browse_config(prefs_win, config_path_row))
+        browse_btn.connect(
+            "clicked", lambda _b: self._on_browse_config(prefs_win, config_path_row)
+        )
         config_path_row.add_suffix(browse_btn)
 
         clear_btn = Gtk.Button(icon_name="edit-clear-symbolic")
@@ -924,17 +973,23 @@ class NiriModWindow(Adw.ApplicationWindow):
 
         backup_path_row = Adw.ActionRow(title="Backup Directory")
         current_backup = app_settings.get("backup_path", "")
-        backup_path_row.set_subtitle(current_backup if current_backup else "Default (~/.config/nirimod/backups)")
-        
+        backup_path_row.set_subtitle(
+            current_backup if current_backup else "Default (~/.config/nirimod/backups)"
+        )
+
         browse_backup_btn = Gtk.Button(label="Browse...")
         browse_backup_btn.set_valign(Gtk.Align.CENTER)
-        browse_backup_btn.connect("clicked", lambda _b: self._on_browse_backup_dir(prefs_win, backup_path_row))
+        browse_backup_btn.connect(
+            "clicked", lambda _b: self._on_browse_backup_dir(prefs_win, backup_path_row)
+        )
         backup_path_row.add_suffix(browse_backup_btn)
 
         clear_backup_btn = Gtk.Button(icon_name="edit-clear-symbolic")
         clear_backup_btn.set_valign(Gtk.Align.CENTER)
         clear_backup_btn.set_tooltip_text("Reset to default")
-        clear_backup_btn.connect("clicked", lambda _b: self._on_clear_backup_dir(backup_path_row))
+        clear_backup_btn.connect(
+            "clicked", lambda _b: self._on_clear_backup_dir(backup_path_row)
+        )
         backup_path_row.add_suffix(clear_backup_btn)
 
         config_grp.add(backup_path_row)
@@ -955,15 +1010,22 @@ class NiriModWindow(Adw.ApplicationWindow):
             subtitle="Maximum number of backups to keep per file (0 = unlimited)",
             digits=0,
         )
-        backup_limit_row.set_adjustment(Gtk.Adjustment(value=app_settings.get("backup_limit", 10), lower=0, upper=1000, step_increment=1))
+        backup_limit_row.set_adjustment(
+            Gtk.Adjustment(
+                value=app_settings.get("backup_limit", 10),
+                lower=0,
+                upper=1000,
+                step_increment=1,
+            )
+        )
         backup_limit_row.connect(
             "notify::value",
             lambda row, _: app_settings.set("backup_limit", int(row.get_value())),
         )
-        
+
         def _on_auto_backup_changed(switch_row, _param):
             backup_limit_row.set_sensitive(switch_row.get_active())
-            
+
         auto_backup_row.connect("notify::active", _on_auto_backup_changed)
         backup_limit_row.set_sensitive(auto_backup_row.get_active())
 
@@ -975,6 +1037,7 @@ class NiriModWindow(Adw.ApplicationWindow):
 
     def _on_browse_config(self, parent_win, row):
         from nirimod import app_settings
+
         dialog = Gtk.FileDialog()
         dialog.set_title("Select Niri Config")
         f = Gtk.FileFilter()
@@ -991,17 +1054,20 @@ class NiriModWindow(Adw.ApplicationWindow):
                     path = f.get_path()
                     app_settings.set("config_path", path)
                     row.set_subtitle(path)
-                    self.show_toast("Restart NiriMod to use the new config path.", timeout=5)
+                    self.show_toast(
+                        "Restart NiriMod to use the new config path.", timeout=5
+                    )
             except GLib.Error:
                 pass
 
         dialog.open(parent_win, None, _on_response)
-        
+
     def _on_browse_backup_dir(self, parent_win, row):
         from nirimod import app_settings
+
         dialog = Gtk.FileDialog()
         dialog.set_title("Select Backup Directory")
-        
+
         def _on_response(dialog, result):
             try:
                 f = dialog.select_folder_finish(result)
@@ -1011,7 +1077,7 @@ class NiriModWindow(Adw.ApplicationWindow):
                     row.set_subtitle(path)
                     kdl_parser.set_paths(
                         config_path=app_settings.get("config_path", ""),
-                        backup_path=path
+                        backup_path=path,
                     )
                     self.show_toast("Backup directory updated.", timeout=3)
             except GLib.Error:
@@ -1021,16 +1087,17 @@ class NiriModWindow(Adw.ApplicationWindow):
 
     def _on_clear_backup_dir(self, row):
         from nirimod import app_settings
+
         app_settings.set("backup_path", "")
         row.set_subtitle("Default (~/.config/nirimod/backups)")
         kdl_parser.set_paths(
-            config_path=app_settings.get("config_path", ""),
-            backup_path=""
+            config_path=app_settings.get("config_path", ""), backup_path=""
         )
         self.show_toast("Backup directory reset to default.", timeout=3)
 
     def _on_clear_config(self, row):
         from nirimod import app_settings
+
         app_settings.set("config_path", "")
         row.set_subtitle("Default (~/.config/niri/config.kdl)")
         self.show_toast("Restart NiriMod to use the default config path.", timeout=5)
@@ -1114,12 +1181,16 @@ class NiriModWindow(Adw.ApplicationWindow):
                 load_btn = Gtk.Button(label="Load")
                 load_btn.set_valign(Gtk.Align.CENTER)
                 load_btn.add_css_class("flat")
-                load_btn.connect("clicked", lambda _b, nm=n: self._load_profile(nm, dialog))
+                load_btn.connect(
+                    "clicked", lambda _b, nm=n: self._load_profile(nm, dialog)
+                )
                 del_btn = Gtk.Button(icon_name="user-trash-symbolic")
                 del_btn.set_valign(Gtk.Align.CENTER)
                 del_btn.add_css_class("flat")
                 del_btn.add_css_class("error")
-                del_btn.connect("clicked", lambda _b, nm=n: self._delete_profile(nm, dialog))
+                del_btn.connect(
+                    "clicked", lambda _b, nm=n: self._delete_profile(nm, dialog)
+                )
                 row.add_suffix(load_btn)
                 row.add_suffix(del_btn)
                 grp.add(row)
@@ -1130,9 +1201,10 @@ class NiriModWindow(Adw.ApplicationWindow):
         entry.set_hexpand(True)
         save_btn = Gtk.Button(label="Save Current")
         save_btn.add_css_class("suggested-action")
-        save_btn.connect("clicked", lambda _b: self._save_profile(entry.get_text(), dialog))
+        save_btn.connect(
+            "clicked", lambda _b: self._save_profile(entry.get_text(), dialog)
+        )
         save_row.append(entry)
         save_row.append(save_btn)
         box.append(save_row)
         dialog.set_extra_child(box)
-
