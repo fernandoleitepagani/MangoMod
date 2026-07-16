@@ -1,0 +1,42 @@
+name: Tests and Linting
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    name: Run Pytest & Ruff
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libgirepository-2.0-dev libgtk-4-dev libadwaita-1-dev
+          
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v2
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install project dependencies
+        run: uv sync
+        
+      - name: Check code formatting (Ruff)
+        run: uv run ruff format --check .
+
+      - name: Run linter (Ruff)
+        run: uv run ruff check .
+        
+      - name: Run tests (Pytest)
+        run: uv run pytest
+
+      - name: Run type checking (mypy)
+        run: uv run mypy nirimod

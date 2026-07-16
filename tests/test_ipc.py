@@ -54,7 +54,9 @@ class TestValidateConfig(unittest.TestCase):
     def test_valid_config(self):
         from nirimod import niri_ipc
 
-        with patch.object(niri_ipc, "_run_sync", return_value=("Config is valid.\n", "", 0)):
+        with patch.object(
+            niri_ipc, "_run_sync", return_value=("Config is valid.\n", "", 0)
+        ):
             ok, msg = niri_ipc.validate_config()
             self.assertTrue(ok)
             self.assertIn("valid", msg.lower())
@@ -62,7 +64,9 @@ class TestValidateConfig(unittest.TestCase):
     def test_invalid_config(self):
         from nirimod import niri_ipc
 
-        with patch.object(niri_ipc, "_run_sync", return_value=("", "parse error line 3", 1)):
+        with patch.object(
+            niri_ipc, "_run_sync", return_value=("", "parse error line 3", 1)
+        ):
             ok, msg = niri_ipc.validate_config()
             self.assertFalse(ok)
             self.assertIn("parse error", msg)
@@ -98,7 +102,9 @@ class TestLoadConfigFile(unittest.TestCase):
             ok, msg = niri_ipc.load_config_file()
 
         self.assertTrue(ok)
-        self.assertEqual(captured["args"], ["niri", "msg", "action", "load-config-file"])
+        self.assertEqual(
+            captured["args"], ["niri", "msg", "action", "load-config-file"]
+        )
         self.assertEqual(captured["timeout"], 10.0)
         self.assertIn("applied", msg)
 
@@ -164,6 +170,7 @@ class TestRunInThread(unittest.TestCase):
 
         try:
             import gi
+
             gi.require_version("GLib", "2.0")
             from gi.repository import GLib
         except (ModuleNotFoundError, Exception):
@@ -185,7 +192,6 @@ class TestRunInThread(unittest.TestCase):
             GLib.idle_add = original_idle_add
 
         self.assertEqual(results, [42])
-
 
 
 if __name__ == "__main__":

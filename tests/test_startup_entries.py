@@ -13,7 +13,9 @@ class TestStartupEntryDelay(unittest.TestCase):
         node = make_startup_node("waybar --config /etc/waybar.json", False, 7)
 
         self.assertEqual(node.name, "spawn-sh-at-startup")
-        self.assertEqual(node.args, ["sleep 7 && exec waybar --config /etc/waybar.json"])
+        self.assertEqual(
+            node.args, ["sleep 7 && exec waybar --config /etc/waybar.json"]
+        )
 
     def test_delayed_direct_command_can_be_edited_without_sleep_prefix(self):
         node = KdlNode(

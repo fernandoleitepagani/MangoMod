@@ -61,7 +61,12 @@ class TestUndoRedo(unittest.TestCase):
 
         entry = state.apply_undo()
         self.assertIsNotNone(entry)
-        self.assertEqual(state.nodes[0].get_child("gaps") if state.nodes and state.nodes[0].children else None, None)
+        self.assertEqual(
+            state.nodes[0].get_child("gaps")
+            if state.nodes and state.nodes[0].children
+            else None,
+            None,
+        )
         # After undo, nodes should be from the 'before' snapshot
         kdl_out = write_kdl(state.nodes)
         self.assertIn("8", kdl_out)
