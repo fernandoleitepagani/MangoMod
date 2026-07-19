@@ -53,6 +53,20 @@ Because NiriMod only touches the standard Niri settings it understands, your cus
 
 ---
 
+## NixOS & Home Manager
+
+If you manage your Niri configuration through Home Manager, you can configure it so NiriMod can edit your configuration directly in your dotfiles repository. This enables a workflow where NiriMod saves changes, Niri hot-reloads instantly, and your Nix configuration source remains perfectly in sync for your next rebuild.
+
+To enable this, use the `mkOutOfStoreSymlink` helper to point to your raw KDL file instead of copying it into the read-only Nix store:
+
+```nix
+xdg.configFile."niri/config.kdl".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/path/to/your/dotfiles/niri/config.kdl";
+```
+
+Because NiriMod intelligently follows symlinks during saves, any changes made in the GUI will be written directly to the source file in your dotfiles directory.
+
+---
+
 ## Installation
 
 ### AUR (Arch Linux)
