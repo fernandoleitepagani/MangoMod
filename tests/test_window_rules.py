@@ -211,6 +211,14 @@ class TestWindowRuleActions(unittest.TestCase):
             (True, 12, 34, "bottom-right"),
         )
 
+    def test_exclude_block_reads_and_writes(self):
+        exc = KdlNode("exclude", props={"app-id": "kitty", "is-floating": True})
+        rule = KdlNode("window-rule", children=[exc])
+        out = write_kdl([rule])
+        self.assertIn("exclude ", out)
+        self.assertIn('app-id="kitty"', out)
+        self.assertIn("is-floating=true", out)
+
 
 if __name__ == "__main__":
     unittest.main()

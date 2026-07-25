@@ -20,7 +20,7 @@ from nirimod.kdl_parser import KdlNode, KdlRawString
 from nirimod.pages.base import BasePage
 
 
-# ── Human-readable labels ────────────────────────────────────────────────────
+# human-readable labels
 
 SCREENCAST_BLOCK_KEY = "block-out-from"
 
@@ -311,7 +311,7 @@ def _layer_rule_summary(rule: KdlNode) -> tuple[str, str]:
     return GLib.markup_escape_text(title), GLib.markup_escape_text(subtitle)
 
 
-# ── Page ─────────────────────────────────────────────────────────────────────
+# page
 
 
 class WindowRulesPage(BasePage):
@@ -347,7 +347,7 @@ class WindowRulesPage(BasePage):
         self._rebuild()
         self._rebuild_layer()
 
-    # ── Window rules ─────────────────────────────────────────────────────────
+    # window rules
 
     def _get_rules(self) -> list[KdlNode]:
         return [n for n in self._nodes if n.name == "window-rule"]
@@ -641,7 +641,7 @@ class WindowRulesPage(BasePage):
 
         prefs = Adw.PreferencesPage()
 
-        # ── Match criteria ────────────────────────────────────────────────
+        # match criteria
         match_grp = Adw.PreferencesGroup(
             title="Match Criteria",
             description="Leave fields empty to match any window",
@@ -668,7 +668,36 @@ class WindowRulesPage(BasePage):
 
         prefs.add(match_grp)
 
-        # ── Visibility & layout ───────────────────────────────────────────
+        # exclude criteria
+        exclude_grp = Adw.PreferencesGroup(
+            title="Exclude Criteria",
+            description="If matched, the rule will NOT apply",
+        )
+        exclude_node = rule.get_child("exclude") if rule else None
+
+        exc_app_id_row = Adw.EntryRow(title="App ID (regex, e.g. ^kitty$)")
+        exc_app_id_row.set_text(
+            str(exclude_node.props.get("app-id", "")) if exclude_node else ""
+        )
+        exclude_grp.add(exc_app_id_row)
+
+        exc_title_row = Adw.EntryRow(title="Window Title (regex)")
+        exc_title_row.set_text(
+            str(exclude_node.props.get("title", "")) if exclude_node else ""
+        )
+        exclude_grp.add(exc_title_row)
+
+        exc_bool_match_rows: dict[str, Adw.SwitchRow] = {}
+        for key, label in BOOL_MATCH_LABELS.items():
+            sr = Adw.SwitchRow(title=label)
+            val = exclude_node.props.get(key, False) if exclude_node else False
+            sr.set_active(bool(val))
+            exclude_grp.add(sr)
+            exc_bool_match_rows[key] = sr
+
+        prefs.add(exclude_grp)
+
+        # visibility & layout
         layout_grp = Adw.PreferencesGroup(
             title="Layout & Visibility",
             description="Window-size overrides apply when a matching window opens.",
@@ -703,7 +732,7 @@ class WindowRulesPage(BasePage):
 
         prefs.add(layout_grp)
 
-        # ── Visual effects ────────────────────────────────────────────────
+        # visual effects
         fx_grp = Adw.PreferencesGroup(title="Visual Effects")
 
         op_val = 0.0
@@ -734,7 +763,7 @@ class WindowRulesPage(BasePage):
 
         prefs.add(fx_grp)
 
-        # ── Numeric dimensions ────────────────────────────────────────────
+        # numeric dimensions
         dim_grp = Adw.PreferencesGroup(title="Dimensions (0 = unset)")
         num_rows: dict[str, Adw.SpinRow] = {}
         for key, (label, lo, hi, step, digits) in NUM_ACTION_LABELS.items():
@@ -753,7 +782,7 @@ class WindowRulesPage(BasePage):
 
         prefs.add(dim_grp)
 
-        # ── Workspace / output ────────────────────────────────────────────
+        # workspace / output
         place_grp = Adw.PreferencesGroup(title="Placement")
         str_rows: dict[str, Adw.EntryRow] = {}
         for key, label in STR_ACTION_LABELS.items():
@@ -769,7 +798,7 @@ class WindowRulesPage(BasePage):
         scroll.set_child(prefs)
         toolbar_view.set_content(scroll)
 
-        # ── Save button ───────────────────────────────────────────────────
+        # save button
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         btn_box.set_halign(Gtk.Align.END)
         btn_box.set_margin_start(16)
@@ -810,6 +839,24 @@ class WindowRulesPage(BasePage):
                     has_match = True
             if has_match:
                 new_rule.children.append(m)
+
+            # exclude node
+            exc = KdlNode("exclude")
+            has_exc = False
+            exc_app_id_text = exc_app_id_row.get_text().strip()
+            if exc_app_id_text:
+                exc.props["app-id"] = KdlRawString(exc_app_id_text)
+                has_exc = True
+            exc_title_text = exc_title_row.get_text().strip()
+            if exc_title_text:
+                exc.props["title"] = KdlRawString(exc_title_text)
+                has_exc = True
+            for key, sr in exc_bool_match_rows.items():
+                if sr.get_active():
+                    exc.props[key] = True
+                    has_exc = True
+            if has_exc:
+                new_rule.children.append(exc)
 
             # per-rule window sizing
             for key, controls in size_controls.items():
@@ -883,7 +930,7 @@ class WindowRulesPage(BasePage):
         dialog.set_child(toolbar_view)
         dialog.present(self._win)
 
-    # ── Layer rules ───────────────────────────────────────────────────────────
+    # layer rules
 
     def _get_layer_rules(self) -> list[KdlNode]:
         return [n for n in self._nodes if n.name == "layer-rule"]
