@@ -658,13 +658,19 @@ class WindowRulesPage(BasePage):
         title_row.set_text(str(match_node.props.get("title", "")) if match_node else "")
         match_grp.add(title_row)
 
-        bool_match_rows: dict[str, Adw.SwitchRow] = {}
+        bool_match_rows: dict[str, Adw.ComboRow] = {}
         for key, label in BOOL_MATCH_LABELS.items():
-            sr = Adw.SwitchRow(title=label)
-            val = match_node.props.get(key, False) if match_node else False
-            sr.set_active(bool(val))
-            match_grp.add(sr)
-            bool_match_rows[key] = sr
+            model = Gtk.StringList.new(["Unset", "True", "False"])
+            cr = Adw.ComboRow(title=label, model=model)
+            val = match_node.props.get(key) if match_node else None
+            if val is True:
+                cr.set_selected(1)
+            elif val is False:
+                cr.set_selected(2)
+            else:
+                cr.set_selected(0)
+            match_grp.add(cr)
+            bool_match_rows[key] = cr
 
         prefs.add(match_grp)
 
@@ -687,13 +693,19 @@ class WindowRulesPage(BasePage):
         )
         exclude_grp.add(exc_title_row)
 
-        exc_bool_match_rows: dict[str, Adw.SwitchRow] = {}
+        exc_bool_match_rows: dict[str, Adw.ComboRow] = {}
         for key, label in BOOL_MATCH_LABELS.items():
-            sr = Adw.SwitchRow(title=label)
-            val = exclude_node.props.get(key, False) if exclude_node else False
-            sr.set_active(bool(val))
-            exclude_grp.add(sr)
-            exc_bool_match_rows[key] = sr
+            model = Gtk.StringList.new(["Unset", "True", "False"])
+            cr = Adw.ComboRow(title=label, model=model)
+            val = exclude_node.props.get(key) if exclude_node else None
+            if val is True:
+                cr.set_selected(1)
+            elif val is False:
+                cr.set_selected(2)
+            else:
+                cr.set_selected(0)
+            exclude_grp.add(cr)
+            exc_bool_match_rows[key] = cr
 
         prefs.add(exclude_grp)
 
@@ -833,9 +845,13 @@ class WindowRulesPage(BasePage):
             if title_text:
                 m.props["title"] = KdlRawString(title_text)
                 has_match = True
-            for key, sr in bool_match_rows.items():
-                if sr.get_active():
+            for key, cr in bool_match_rows.items():
+                sel = cr.get_selected()
+                if sel == 1:
                     m.props[key] = True
+                    has_match = True
+                elif sel == 2:
+                    m.props[key] = False
                     has_match = True
             if has_match:
                 new_rule.children.append(m)
@@ -851,9 +867,13 @@ class WindowRulesPage(BasePage):
             if exc_title_text:
                 exc.props["title"] = KdlRawString(exc_title_text)
                 has_exc = True
-            for key, sr in exc_bool_match_rows.items():
-                if sr.get_active():
+            for key, cr in exc_bool_match_rows.items():
+                sel = cr.get_selected()
+                if sel == 1:
                     exc.props[key] = True
+                    has_exc = True
+                elif sel == 2:
+                    exc.props[key] = False
                     has_exc = True
             if has_exc:
                 new_rule.children.append(exc)
