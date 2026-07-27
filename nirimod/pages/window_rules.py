@@ -266,7 +266,8 @@ def _make_size_node(key: str, kind: str, value: float | int | None) -> KdlNode |
 def _rule_summary(rule: KdlNode) -> tuple[str, str]:
     """Return (title, subtitle) for a window-rule row."""
     matches = rule.get_children("match")
-    if not matches:
+    excludes = rule.get_children("exclude")
+    if not matches and not excludes:
         title = "Global Rule"
     else:
         parts = []
@@ -275,6 +276,11 @@ def _rule_summary(rule: KdlNode) -> tuple[str, str]:
                 parts.append(f"{k}: {v}")
             for a in m.args:
                 parts.append(str(a))
+        for e in excludes:
+            for k, v in e.props.items():
+                parts.append(f"not {k}: {v}")
+            for a in e.args:
+                parts.append(f"not {a}")
         title = "  •  ".join(parts) if parts else "(any)"
 
     badges = []

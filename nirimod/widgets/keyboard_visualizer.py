@@ -354,6 +354,17 @@ _STATIC_LABELS = {
     "print": "PrtSc",
     "insert": "Ins",
     "delete": "Del",
+    "minus": "-",
+    "equal": "=",
+    "bracketleft": "[",
+    "bracketright": "]",
+    "backslash": "\\",
+    "semicolon": ";",
+    "quote": "'",
+    "comma": ",",
+    "period": ".",
+    "slash": "/",
+    "less": "<",
 }
 
 
