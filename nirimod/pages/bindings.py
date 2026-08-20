@@ -108,6 +108,20 @@ def _make_bind(
     }
 
 
+def find_binding_conflicts(binds_list: list[dict]) -> set[str]:
+    seen: set[str] = set()
+    conflicts: set[str] = set()
+    for b in binds_list:
+        ks = b.get("keysym", "").strip()
+        if not ks:
+            continue
+        if ks in seen:
+            conflicts.add(ks)
+        else:
+            seen.add(ks)
+    return conflicts
+
+
 def _parse_binds_from_nodes(nodes: list[KdlNode]) -> list[dict]:
     """Parse all bind nodes from the binds block."""
     binds_node = next((n for n in nodes if n.name == "binds"), None)
@@ -340,7 +354,7 @@ class BindingsPage(BasePage):
                             v = xkb.child_arg("variant")
                             if layout:
                                 return f"{layout}:{v}" if v else layout
-        except Exception:
+        except (OSError, ValueError):
             pass
         return None
 
@@ -467,6 +481,8 @@ class BindingsPage(BasePage):
         if not hasattr(self, "_flowbox"):
             return
 
+        self._conflicts = find_binding_conflicts(self._binds)
+
         # Clear existing children
         while True:
             child = self._flowbox.get_first_child()
@@ -551,9 +567,22 @@ class BindingsPage(BasePage):
         bottom_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         bottom_row.set_halign(Gtk.Align.END)
 
+        if getattr(self, "_conflicts", None) and keysym in self._conflicts:
+            conflict_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            conflict_box.add_css_class("error")
+            warn_icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+            warn_label = Gtk.Label(label="Duplicate")
+            conflict_box.append(warn_icon)
+            conflict_box.append(warn_label)
+            conflict_box.set_tooltip_text(
+                "Duplicate keybinding detected. Niri will reject configs with duplicate binds."
+            )
+            bottom_row.append(conflict_box)
+
         if b.get("allow_when_locked"):
-            lock = Gtk.Label(label="🔒")
+            lock = Gtk.Image.new_from_icon_name("changes-prevent-symbolic")
             lock.set_opacity(0.6)
+            lock.set_tooltip_text("Allowed when screen is locked")
             bottom_row.append(lock)
 
         edit_btn = Gtk.Button(icon_name="document-edit-symbolic")
@@ -639,6 +668,10 @@ class BindingsPage(BasePage):
         header.set_title_widget(Adw.WindowTitle(title=dialog.get_title()))
         box.append(header)
 
+        conflict_banner = Adw.Banner(title="")
+        conflict_banner.set_revealed(False)
+        box.append(conflict_banner)
+
         prefs = Adw.PreferencesPage()
         prefs.set_vexpand(True)
 
@@ -703,12 +736,42 @@ class BindingsPage(BasePage):
         save_btn.add_css_class("suggested-action")
         save_btn.add_css_class("pill")
 
+        def _check_conflict(*_):
+            mods = [m for m, cb in mod_checks.items() if cb.get_active()]
+            key = key_entry.get_text().strip()
+            if not key:
+                conflict_banner.set_revealed(False)
+                return
+            keysym = "+".join(mods + [key])
+            for i, b in enumerate(self._binds):
+                if i != idx and b.get("keysym") == keysym:
+                    action_name = b.get("action") or "another action"
+                    conflict_banner.set_title(
+                        f"Duplicate shortcut: '{keysym}' is already assigned to '{action_name}'."
+                    )
+                    conflict_banner.set_revealed(True)
+                    return
+            conflict_banner.set_revealed(False)
+
+        key_entry.connect("notify::text", _check_conflict)
+        for cb in mod_checks.values():
+            cb.connect("toggled", _check_conflict)
+        _check_conflict()
+
         def _do_save(*_):
             mods = [m for m, cb in mod_checks.items() if cb.get_active()]
             key = key_entry.get_text().strip()
             if not key:
                 return
             keysym = "+".join(mods + [key])
+            for i, b in enumerate(self._binds):
+                if i != idx and b.get("keysym") == keysym:
+                    action_name = b.get("action") or "another action"
+                    conflict_banner.set_title(
+                        f"Cannot save: '{keysym}' is already assigned to '{action_name}'. Niri rejects duplicate keybinds."
+                    )
+                    conflict_banner.set_revealed(True)
+                    return
             action_idx = act_combo.get_selected()
             action = NIRI_ACTIONS[action_idx] if action_idx < len(NIRI_ACTIONS) else ""
             arg_text = arg_row.get_text().strip()
@@ -765,7 +828,7 @@ class BindingsPage(BasePage):
             monitor = gfile.monitor_file(Gio.FileMonitorFlags.NONE, None)
             monitor.connect("changed", self._on_config_file_changed)
             self._file_monitor = monitor
-        except Exception:
+        except (GLib.Error, OSError):
             pass
 
     def _on_config_file_changed(self, monitor, file, other_file, event_type):

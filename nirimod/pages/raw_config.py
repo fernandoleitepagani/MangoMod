@@ -221,7 +221,10 @@ class RawConfigPage(BasePage):
             ok, msg = result
             if not ok:
                 tmp.unlink(missing_ok=True)
-                self.show_toast(f"Validation error: {msg[:120]}", timeout=8)
+                if hasattr(self._win, "show_validation_error"):
+                    self._win.show_validation_error(msg)
+                else:
+                    self.show_toast(f"Validation error: {msg[:120]}", timeout=8)
                 return
             try:
                 replace_config_file(tmp, path)
@@ -241,7 +244,7 @@ class RawConfigPage(BasePage):
     def _on_reloaded(self, result):
         ok, msg = result
         if ok:
-            self.show_toast("Config saved and applied ✓", timeout=3)
+            self.show_toast("Config saved and applied", timeout=3)
         else:
             self.show_toast(f"Saved, but reload failed: {msg[:80]}", timeout=8)
         self._win.app_state.reload_from_disk()
@@ -311,7 +314,13 @@ class RawConfigPage(BasePage):
 
         def _on_validated(result):
             ok, msg = result
-            self.show_toast(msg[:120], timeout=5)
+            if ok:
+                self.show_toast(msg or "Configuration is valid", timeout=3)
+            else:
+                if hasattr(self._win, "show_validation_error"):
+                    self._win.show_validation_error(msg)
+                else:
+                    self.show_toast(f"Validation error: {msg[:120]}", timeout=8)
 
         niri_ipc.run_in_thread(
             lambda: niri_ipc.validate_config(str(NIRI_CONFIG)), _on_validated

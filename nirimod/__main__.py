@@ -50,12 +50,39 @@ class NiriModApp(Adw.Application):
             application_id="io.github.nirimod",
             flags=Gio.ApplicationFlags.NON_UNIQUE,
         )
-        GLib.set_application_name("NiriMod")
+        if not GLib.get_application_name():
+            GLib.set_application_name("NiriMod")
         GLib.set_prgname("nirimod")
 
         # Prefer dark theme globally via libadwaita
         style_manager = Adw.StyleManager.get_default()
         style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+
+        self._cli_config_path: str | None = None
+        self.add_main_option(
+            "config",
+            ord("c"),
+            GLib.OptionFlags.NONE,
+            GLib.OptionArg.STRING,
+            "Path to Niri configuration file",
+            "PATH",
+        )
+        self.add_main_option(
+            "version",
+            ord("v"),
+            GLib.OptionFlags.NONE,
+            GLib.OptionArg.NONE,
+            "Show application version",
+            None,
+        )
+
+    def do_handle_local_options(self, options: GLib.VariantDict) -> int:
+        if options.contains("version"):
+            print("NiriMod 0.5.0")
+            return 0
+        if options.contains("config"):
+            self._cli_config_path = options.lookup_value("config").get_string()
+        return -1
 
     def do_activate(self):
         win = self.get_active_window()
@@ -63,8 +90,9 @@ class NiriModApp(Adw.Application):
             from nirimod import app_settings
             from nirimod.kdl_parser import set_paths
 
+            cfg_path = self._cli_config_path or app_settings.get("config_path", "")
             set_paths(
-                config_path=app_settings.get("config_path", ""),
+                config_path=cfg_path,
                 backup_path=app_settings.get("backup_path", ""),
             )
             win = NiriModWindow(application=self)

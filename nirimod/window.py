@@ -104,7 +104,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         self._toast_overlay.set_child(root_box)
 
         self._niri_banner = Gtk.Label(
-            label="⚠  niri is not running — changes will be saved but not applied live",
+            label="niri is not running — changes will be saved but not applied live",
             xalign=0,
         )
         self._niri_banner.add_css_class("nm-niri-banner")
@@ -604,7 +604,7 @@ class NiriModWindow(Adw.ApplicationWindow):
                 self._build_search_index()
             self.mark_clean()
             if reload_ok:
-                self.show_toast("Config saved and applied ✓", timeout=3)
+                self.show_toast("Config saved and applied", timeout=3)
             else:
                 self.show_toast(
                     f"Config saved, but reload failed: {reload_msg}", timeout=8
@@ -623,7 +623,7 @@ class NiriModWindow(Adw.ApplicationWindow):
                     # Restore all files from snapshots
                     for p, text in snapshots.items():
                         p.write_text(text)
-                    self.show_toast(f"Validation error: {msg}", timeout=8)
+                    self.show_validation_error(msg)
                     return
                 niri_ipc.run_in_thread(niri_ipc.load_config_file, _finish_save)
 
@@ -635,8 +635,8 @@ class NiriModWindow(Adw.ApplicationWindow):
             def _on_validated(result):
                 ok, msg = result
                 if not ok:
-                    self.show_toast(f"Validation error: {msg}", timeout=8)
                     tmp_kdl.unlink(missing_ok=True)
+                    self.show_validation_error(msg)
                     return
                 kdl_parser.replace_config_file(tmp_kdl, kdl_parser.NIRI_CONFIG)
                 niri_ipc.run_in_thread(niri_ipc.load_config_file, _finish_save)
@@ -644,6 +644,35 @@ class NiriModWindow(Adw.ApplicationWindow):
             niri_ipc.run_in_thread(
                 lambda: niri_ipc.validate_config(str(tmp_kdl)), _on_validated
             )
+
+    def show_validation_error(self, msg: str):
+        dialog = Adw.AlertDialog(
+            heading="Configuration Validation Failed",
+            body="Niri rejected the configuration syntax:",
+        )
+        dialog.add_response("close", "Close")
+        dialog.add_response("raw", "Open in Raw Config")
+        dialog.set_response_appearance("raw", Adw.ResponseAppearance.SUGGESTED)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_min_content_height(160)
+        scroll.set_max_content_height(360)
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+
+        tv = Gtk.TextView()
+        tv.set_editable(False)
+        tv.set_cursor_visible(False)
+        tv.set_monospace(True)
+        tv.set_wrap_mode(Gtk.WrapMode.NONE)
+        tv.get_buffer().set_text(msg)
+        scroll.set_child(tv)
+        dialog.set_extra_child(scroll)
+
+        def _on_response(_d, response):
+            if response == "raw":
+                self._select_page("raw_config")
+
+        dialog.choose(self, None, _on_response)
 
     def _on_discard(self):
         self.app_state.discard()
@@ -753,7 +782,7 @@ class NiriModWindow(Adw.ApplicationWindow):
     def _check_kofi(self):
         from nirimod import app_settings
 
-        if app_settings.get("kofi_v3_dont_show", False):
+        if app_settings.get("kofi_v4_dont_show", False):
             return
         self._show_kofi_dialog()
 
@@ -761,7 +790,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         from nirimod import app_settings
 
         dialog = Adw.AlertDialog(
-            heading="Enjoying NiriMod? ☕",
+            heading="Enjoying NiriMod?",
             body=(
                 "NiriMod is a passion project built entirely in my free time to make customizing Niri easier for everyone.\n\n"
                 "If it has improved your workflow, please consider supporting its development with a small tip on Ko-fi! "
@@ -774,13 +803,13 @@ class NiriModWindow(Adw.ApplicationWindow):
         dialog.set_default_response("kofi")
 
         dont_show_check = Gtk.CheckButton(label="Don't show this again on startup")
-        dont_show_check.set_active(app_settings.get("kofi_v3_dont_show", False))
+        dont_show_check.set_active(app_settings.get("kofi_v4_dont_show", False))
         dont_show_check.set_halign(Gtk.Align.CENTER)
         dont_show_check.set_margin_top(4)
         dialog.set_extra_child(dont_show_check)
 
         def _on_kofi_response(dlg, response):
-            app_settings.set("kofi_v3_dont_show", dont_show_check.get_active())
+            app_settings.set("kofi_v4_dont_show", dont_show_check.get_active())
             if response == "kofi":
                 Gio.AppInfo.launch_default_for_uri("https://ko-fi.com/srinivasr", None)
 
@@ -833,7 +862,7 @@ class NiriModWindow(Adw.ApplicationWindow):
                         shutil.copy2(p, dest)
                     except ValueError:
                         shutil.copy2(p, baseline_dir / p.name)
-            self.show_toast("Baseline backup created ✓")
+            self.show_toast("Baseline backup created")
         except Exception as e:
             self.show_toast(f"Backup failed: {e}", timeout=6)
 
@@ -913,7 +942,7 @@ class NiriModWindow(Adw.ApplicationWindow):
             self.app_state.reload_from_disk()
             self.notify_nodes_changed()
             self.mark_clean()
-            self.show_toast("Config restored from backup ✓")
+            self.show_toast("Config restored from backup")
         except Exception as e:
             self.show_toast(f"Restore failed: {e}", timeout=6)
 
@@ -1154,7 +1183,7 @@ class NiriModWindow(Adw.ApplicationWindow):
         if not name:
             return
         prof_mod.save_profile(name, source_files=self.app_state.source_files)
-        self.show_toast(f"Profile '{name}' saved ✓")
+        self.show_toast(f"Profile '{name}' saved")
 
     def _load_profile(self, name: str, dialog):
         if prof_mod.load_profile(name):
