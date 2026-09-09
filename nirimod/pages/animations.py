@@ -450,7 +450,7 @@ class AnimationsPage(BasePage):
     def _update_header(self):
         if self._active_preset_name:
             self._active_preset_lbl.set_label(
-                f"✨ Active preset: <b>{GLib.markup_escape_text(self._active_preset_name)}</b>"
+                f"Active preset: <b>{GLib.markup_escape_text(self._active_preset_name)}</b>"
             )
             self._active_preset_lbl.set_use_markup(True)
         else:
@@ -796,7 +796,7 @@ class AnimationsPage(BasePage):
             parent = entry["local_path"].parent
             if parent.exists() and not any(parent.iterdir()):
                 parent.rmdir()
-            self.show_toast(f"🗑 {entry['display_name']} deleted")
+            self.show_toast(f"{entry['display_name']} deleted")
             self._refresh_local_presets_group()
         except OSError as exc:
             self.show_toast(f"Delete failed: {exc}")

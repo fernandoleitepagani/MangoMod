@@ -30,7 +30,7 @@ def make_toolbar_page(
         menu.append("Restore Backup...", "win.reset_config")
 
         kofi_section = Gio.Menu()
-        kofi_section.append("Support on Ko-fi ☕", "win.open_kofi")
+        kofi_section.append("Support on Ko-fi", "win.open_kofi")
         menu.append_section(None, kofi_section)
 
         menu_btn = Gtk.MenuButton(icon_name="open-menu-symbolic")

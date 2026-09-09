@@ -713,19 +713,15 @@ class OutputsPage(BasePage):
 
     def _ensure_output_fields(self, out_node: KdlNode, name: str):
         manual_out = None
-        try:
-            manual_nodes = self._nodes
-            if manual_nodes:
-                manual_out = next(
-                    (
-                        n
-                        for n in manual_nodes
-                        if n.name == "output" and n.args and n.args[0] == name
-                    ),
-                    None,
-                )
-        except Exception:
-            pass
+        if self._nodes:
+            manual_out = next(
+                (
+                    n
+                    for n in self._nodes
+                    if n.name == "output" and n.args and n.args[0] == name
+                ),
+                None,
+            )
 
         if manual_out:
             if out_node.get_child("mode") is None:

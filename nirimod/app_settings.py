@@ -27,7 +27,7 @@ def _load() -> dict:
             data = json.loads(_SETTINGS_FILE.read_text())
             _cache = {**_DEFAULTS, **data}
             return _cache
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             pass
     _cache = dict(_DEFAULTS)
     return _cache

@@ -129,7 +129,7 @@ read
         try:
             subprocess.Popen(command)
             return
-        except Exception:
+        except (OSError, subprocess.SubprocessError):
             continue
 
     print("Could not find a suitable terminal to launch the update.")

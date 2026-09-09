@@ -985,7 +985,7 @@ class _ActionPanel(Gtk.Box):
                 row.add_prefix(keys_box)
 
                 if b.get("allow_when_locked"):
-                    lock = Gtk.Label(label="🔒")
+                    lock = Gtk.Image.new_from_icon_name("changes-prevent-symbolic")
                     lock.set_tooltip_text("Allowed when screen is locked")
                     lock.set_valign(Gtk.Align.CENTER)
                     row.add_suffix(lock)

@@ -37,7 +37,7 @@ All checks must pass before your PR can be merged.
 ## Code style
 
 - Ruff enforces linting and formatting rules. Always run with `--fix` and `format`.
-- Mypy must pass clean. Don't use `assert` for type narrowing — restructure the code instead.
+- Mypy must pass clean. Avoid `assert` for type narrowing; restructure the code instead.
 - Follow existing patterns for option rows, pages, and GTK widgets rather than inventing new ones.
 
 ## Scope

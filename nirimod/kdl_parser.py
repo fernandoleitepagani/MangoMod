@@ -506,6 +506,7 @@ def _atomic_write(path: Path, content: str) -> None:
     except FileNotFoundError:
         target_mode = None
     fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".nirimod_tmp_")
+    success = False
     try:
         os.write(fd, content.encode())
         if target_mode is not None:
@@ -513,14 +514,15 @@ def _atomic_write(path: Path, content: str) -> None:
         os.close(fd)
         fd = -1
         os.replace(tmp, target)
-    except BaseException:
+        success = True
+    finally:
         if fd != -1:
             os.close(fd)
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+        if not success:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 def replace_config_file(source: Path, destination: Path) -> None:
