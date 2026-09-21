@@ -3,11 +3,11 @@ set -euo pipefail
 
 # Constants & Paths
 INSTALLER_VERSION="1.0.0"
-INSTALL_DIR="$HOME/.local/share/nirimod"
+INSTALL_DIR="$HOME/.local/share/mangomod"
 BIN_DIR="$HOME/.local/bin"
 DESKTOP_FILE_DIR="$HOME/.local/share/applications"
 ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
-REPO_URL="https://github.com/srinivasr/nirimod"
+REPO_URL="https://github.com/fernandoleitepagani/MangoMod"
 
 DISTRO=""
 DISTRO_PRETTY=""
@@ -48,8 +48,8 @@ ask() {
 
 print_banner() {
   clear
-  echo -e "${BLUE}${BOLD}NiriMod Installer v${INSTALLER_VERSION}${NC}"
-  echo -e "${CYAN}GUI Configuration Manager for the Niri Wayland Compositor${NC}\n"
+  echo -e "${BLUE}${BOLD}MangoMod Installer v${INSTALLER_VERSION}${NC}"
+  echo -e "${CYAN}GUI Configuration Manager for the MangoWM Wayland Compositor${NC}\n"
 }
 
 # OS Detection
@@ -135,13 +135,8 @@ install_pkgs() {
     emerge)
       echo ""
       echo -e "  ${YELLOW}⚠  Gentoo:${NC} packages compile from source and may take a few minutes."
-      echo -e "     The cairo USE flag will be set for dev-python/pygobject (needed for the keyboard view)."
       echo ""
       if ask "Proceed with emerge?" y; then
-        local use_file="/etc/portage/package.use/nirimod"
-        if ! grep -q "dev-python/pygobject" "$use_file" 2>/dev/null; then
-          echo "dev-python/pygobject cairo" | sudo tee -a "$use_file" > /dev/null
-        fi
         sudo emerge --newuse --ask=n "${pkgs[@]}" || {
           error "emerge failed. Try running manually:"
           for pkg in "${pkgs[@]}"; do
@@ -298,13 +293,9 @@ resolve_deps() {
       pkg_installed python3-gobject || MISSING+=("python3-gobject") ;;
     apt)
       pkg_installed python3-gi       || MISSING+=("python3-gi")
-      pkg_installed python3-gi-cairo || MISSING+=("python3-gi-cairo")
       ;;
     emerge)
       pkg_installed dev-python/pygobject || MISSING+=("dev-python/pygobject")
-      pkg_installed dev-python/pycairo || MISSING+=("dev-python/pycairo")
-      pkg_installed x11-libs/libxkbcommon || MISSING+=("x11-libs/libxkbcommon")
-      pkg_installed x11-misc/xkeyboard-config || MISSING+=("x11-misc/xkeyboard-config")
       ;;
   esac
 
@@ -324,6 +315,20 @@ resolve_deps() {
       ;;
   esac
 
+  # Optional runtime tools used by the Outputs page
+  case "$PM" in
+    pacman)
+      pkg_installed wlr-randr || MISSING+=("wlr-randr") ;;
+    dnf)
+      pkg_installed wlr-randr || MISSING+=("wlr-randr") ;;
+    zypper)
+      pkg_installed wlr-randr || MISSING+=("wlr-randr") ;;
+    apt)
+      pkg_installed wlr-randr || MISSING+=("wlr-randr") ;;
+    emerge)
+      pkg_installed gui-apps/wlr-randr || MISSING+=("gui-apps/wlr-randr") ;;
+  esac
+
   # Deduplicate
   if [ ${#MISSING[@]} -gt 0 ]; then
     # Remove duplicate entries
@@ -335,7 +340,7 @@ resolve_deps() {
 check_dependencies() {
   step "Checking System Dependencies"
   detect_image_built_os
-  
+
   if [ "${SKIP_DEPS:-0}" -eq 1 ]; then
     warn "Skipping system package manager checks (--skip-deps)."
     warn "Please ensure git, curl, python3, gtk4, libadwaita, and pygobject are installed manually."
@@ -363,31 +368,22 @@ check_dependencies() {
         exit 1
       fi
     else
-      if [ "${PM:-}" = "emerge" ]; then
-        success "All system packages are already installed."
-        echo -e "  ${YELLOW}Note:${NC} If the keyboard view is blank, you may need to rebuild pygobject with the cairo USE flag:"
-        echo -e "  ${CYAN}echo 'dev-python/pygobject cairo' | sudo tee -a /etc/portage/package.use/nirimod && sudo emerge --newuse dev-python/pygobject dev-python/pycairo${NC}"
-        echo ""
-      else
-        success "All system packages are already installed."
-      fi
+      success "All system packages are already installed."
     fi
   fi
 
-  # Niri compositor check (optional warning)
-  if ! cmd_exists niri; then
-    warn "The 'niri' compositor was not found on PATH."
-    warn "NiriMod requires niri to be running. Install it separately if needed."
-    warn "  Arch:   sudo pacman -S niri"
-    warn "  Fedora: sudo dnf install niri"
-    warn "  Gentoo: sudo emerge gui-wm/niri"
+  # MangoWM compositor check (optional warning)
+  if ! cmd_exists mango; then
+    warn "The 'mango' compositor was not found on PATH."
+    warn "MangoMod requires MangoWM to be running. Install it separately if needed."
+    warn "See: https://github.com/mangowm/mango"
     echo ""
   fi
 
   # uv
   step "Checking uv (Python Environment Manager)"
   if ! cmd_exists uv; then
-    warn "'uv' is not installed. It is required to manage NiriMod's Python environment."
+    warn "'uv' is not installed. It is required to manage MangoMod's Python environment."
     if ask "Install 'uv' via the official installer (astral.sh)?"; then
       info "Downloading and running the uv installer..."
       run_with_filtered_preload bash -c 'set -euo pipefail; curl -LsSf https://astral.sh/uv/install.sh | sh'
@@ -436,17 +432,17 @@ install_app() {
   rm -rf .venv # Ensure clean state
   run_uv venv --system-site-packages --python python3
   run_uv sync --no-dev
-  
+
   # Verification check
   if ! run_uv run python -c "import gi" &>/dev/null; then
     warn "Virtual environment installed, but 'gi' (PyGObject) is still not found."
     warn "This typically happens if the system bindings are missing or Python version mismatch exists."
-    
+
     # Try to diagnose
     local host_python_ver
     host_python_ver=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
     info "Host Python: $host_python_ver"
-    
+
     if ! python3 -c "import gi" &>/dev/null; then
       error "PyGObject is NOT installed on your host system."
       error "Please install it via your package manager first (e.g., python3-gi or python-gobject)."
@@ -466,12 +462,12 @@ install_app() {
   mkdir -p "$BIN_DIR"
 
   # Generate launcher script
-  cat > "$BIN_DIR/nirimod" << EOF
+  cat > "$BIN_DIR/mangomod" << EOF
 #!/usr/bin/env bash
-# NiriMod launcher — auto-generated by install.sh
+# MangoMod launcher — auto-generated by install.sh
 INSTALL_DIR="${INSTALL_DIR}"
 if [ ! -d "\$INSTALL_DIR" ]; then
-    echo "NiriMod is not installed at \$INSTALL_DIR. Please re-run the installer." >&2
+    echo "MangoMod is not installed at \$INSTALL_DIR. Please re-run the installer." >&2
     exit 1
 fi
 export PATH="\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH"
@@ -480,10 +476,10 @@ cd "\$INSTALL_DIR"
 $(declare -f needs_uv_preload_cleanup)
 $(declare -f filtered_ld_preload)
 $(declare -f run_with_filtered_preload)
-run_with_filtered_preload uv run python3 -m nirimod "\$@"
+run_with_filtered_preload uv run python3 -m mangomod "\$@"
 EOF
-  chmod +x "$BIN_DIR/nirimod"
-  success "Launcher created: $BIN_DIR/nirimod"
+  chmod +x "$BIN_DIR/mangomod"
+  success "Launcher created: $BIN_DIR/mangomod"
 
   # Desktop entry
   step "Installing Desktop Entry"
@@ -491,30 +487,30 @@ EOF
   mkdir -p "$ICON_DIR"
 
   # Copy icon if it exists in the repo
-  if [ -f "$INSTALL_DIR/data/nirimod.svg" ]; then
-    cp "$INSTALL_DIR/data/nirimod.svg" "$ICON_DIR/nirimod.svg"
-    ICON_NAME="nirimod"
-  elif [ -f "$INSTALL_DIR/data/nirimod.png" ]; then
-    cp "$INSTALL_DIR/data/nirimod.png" "$HOME/.local/share/icons/hicolor/256x256/apps/nirimod.png"
-    ICON_NAME="nirimod"
+  if [ -f "$INSTALL_DIR/data/mangomod.svg" ]; then
+    cp "$INSTALL_DIR/data/mangomod.svg" "$ICON_DIR/mangomod.svg"
+    ICON_NAME="mangomod"
+  elif [ -f "$INSTALL_DIR/data/mangomod.png" ]; then
+    cp "$INSTALL_DIR/data/mangomod.png" "$HOME/.local/share/icons/hicolor/256x256/apps/mangomod.png"
+    ICON_NAME="mangomod"
   else
     ICON_NAME="preferences-system"
   fi
 
-  cat > "$DESKTOP_FILE_DIR/io.github.nirimod.desktop" << EOF
+  cat > "$DESKTOP_FILE_DIR/io.github.mangomod.desktop" << EOF
 [Desktop Entry]
 Version=1.0
-Name=NiriMod
+Name=MangoMod
 GenericName=Compositor Settings
-Comment=GUI Configuration Manager for the Niri Wayland Compositor
-Exec=${BIN_DIR}/nirimod
+Comment=GUI Configuration Manager for the MangoWM Wayland Compositor
+Exec=${BIN_DIR}/mangomod
 Icon=${ICON_NAME}
 Terminal=false
 Type=Application
 Categories=Utility;Settings;DesktopSettings;
-Keywords=compositor;windowmanager;wayland;niri;settings;config;
+Keywords=compositor;windowmanager;wayland;mango;mangowm;settings;config;
 StartupNotify=true
-StartupWMClass=nirimod
+StartupWMClass=mangomod
 EOF
 
   # Refresh desktop database if available
@@ -533,46 +529,46 @@ EOF
       for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
         if [ -f "$rc" ]; then
           if ! grep -q 'export PATH=.*\.local/bin' "$rc"; then
-            echo -e '\n# nirimod' >> "$rc"
+            echo -e '\n# mangomod' >> "$rc"
             echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$rc"
             success "Patched $rc"
           fi
         fi
       done
     else
-      warn "You can run it directly: ~/.local/bin/nirimod"
+      warn "You can run it directly: ~/.local/bin/mangomod"
     fi
   fi
 
   echo ""
-  success "${BOLD}NiriMod ${INSTALLER_VERSION} installed successfully!${NC}"
-  info "Launch from your app menu, or run: ${CYAN}~/.local/bin/nirimod${NC}"
+  success "${BOLD}MangoMod ${INSTALLER_VERSION} installed successfully!${NC}"
+  info "Launch from your app menu, or run: ${CYAN}~/.local/bin/mangomod${NC}"
 }
 
 # Uninstall
 uninstall() {
-  step "Uninstalling NiriMod"
+  step "Uninstalling MangoMod"
   warn "This will remove:"
   echo "    • $INSTALL_DIR"
-  echo "    • $BIN_DIR/nirimod"
-  echo "    • $DESKTOP_FILE_DIR/io.github.nirimod.desktop"
+  echo "    • $BIN_DIR/mangomod"
+  echo "    • $DESKTOP_FILE_DIR/io.github.mangomod.desktop"
   echo ""
 
-  if ! ask "Are you sure you want to uninstall NiriMod?"; then
+  if ! ask "Are you sure you want to uninstall MangoMod?"; then
     info "Uninstall cancelled."
     return
   fi
 
   rm -rf "$INSTALL_DIR"
-  rm -f  "$BIN_DIR/nirimod"
-  rm -f  "$DESKTOP_FILE_DIR/io.github.nirimod.desktop"
-  rm -f  "$ICON_DIR/nirimod.svg"
+  rm -f  "$BIN_DIR/mangomod"
+  rm -f  "$DESKTOP_FILE_DIR/io.github.mangomod.desktop"
+  rm -f  "$ICON_DIR/mangomod.svg"
 
   if cmd_exists update-desktop-database; then
     update-desktop-database "$DESKTOP_FILE_DIR" 2>/dev/null || true
   fi
 
-  success "NiriMod has been uninstalled."
+  success "MangoMod has been uninstalled."
   pause
   exit 0
 }
@@ -582,8 +578,8 @@ main_menu() {
   while true; do
     print_banner
     echo -e "  Please select an option:\n"
-    echo -e "    ${GREEN}1${NC}) Install / Update NiriMod"
-    echo -e "    ${GREEN}2${NC}) Uninstall NiriMod"
+    echo -e "    ${GREEN}1${NC}) Install / Update MangoMod"
+    echo -e "    ${GREEN}2${NC}) Uninstall MangoMod"
     echo -e "    ${GREEN}q${NC}) Quit"
     echo ""
     read -p "$(echo -e "  ${BOLD}Enter your choice:${NC} ")" choice < /dev/tty || true
@@ -616,7 +612,7 @@ main_menu() {
 # Entry Point
 # Flags:
 #   --install        Download from GitHub and install (non-interactive)
-#   --uninstall      Remove NiriMod (non-interactive)
+#   --uninstall      Remove MangoMod (non-interactive)
 #   --skip-deps      Skip system package manager checks (useful for Gentoo/unsupported distros)
 
 MODE=""

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.mangomod</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>MangoMod</name>
+  <summary>GUI configuration manager for MangoWM</summary>
+
+  <description>
+    <p>
+      MangoMod is a GTK4/libadwaita application for editing MangoWM
+      compositor configuration files.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Reads and writes MangoWM's flat key=value config format</li>
+      <li>Follows every source= and source-optional= include</li>
+      <li>Preserves comments and blank lines across saves</li>
+      <li>Interactive monitor canvas with drag-and-drop positioning</li>
+      <li>Keybinding editor with MangoWM action catalog</li>
+      <li>Window rules and layer rules editor</li>
+      <li>Raw config editor with validation</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.mangomod.desktop</launchable>
+  <url type="homepage">https://github.com/YOUR-USERNAME/MangoMod</url>
+  <url type="bugtracker">https://github.com/YOUR-USERNAME/MangoMod/issues</url>
+
+  <developer id="io.github.mangomod">
+    <name>Your Name</name>
+  </developer>
+
+  <content_rating type="oars-1.1"/>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/YOUR-USERNAME/MangoMod/main/media/20260920210552.png</image>
+      <caption>Window rules editor</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/YOUR-USERNAME/MangoMod/main/media/20260920210616.png</image>
+      <caption>Layout and tag configuration</caption>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="0.6.0" date="2026-09-20">
+      <description>
+        <p>Initial public release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

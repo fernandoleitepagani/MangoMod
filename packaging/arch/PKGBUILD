@@ -1,0 +1,45 @@
+# Maintainer: Your Name <you@example.com>
+pkgname=mangomod
+pkgver=0.6.0
+pkgrel=1
+pkgdesc="A polished GTK4/libadwaita GUI configurator for the MangoWM Wayland compositor"
+arch=('any')
+url="https://github.com/YOUR-USERNAME/MangoMod"
+license=('MIT')
+depends=(
+  'python'
+  'python-gobject'
+  'gtk4'
+  'libadwaita'
+)
+optdepends=(
+  'wlr-randr: query monitor state on the Outputs page'
+)
+makedepends=(
+  'python-build'
+  'python-installer'
+  'python-hatchling'
+)
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "MangoMod-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "MangoMod-$pkgver"
+
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  install -Dm644 data/io.github.mangomod.desktop \
+    "$pkgdir/usr/share/applications/io.github.mangomod.desktop"
+  install -Dm644 data/io.github.mangomod.metainfo.xml \
+    "$pkgdir/usr/share/metainfo/io.github.mangomod.metainfo.xml"
+  install -Dm644 data/mangomod.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/io.github.mangomod.svg"
+
+  install -Dm644 LICENSE \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

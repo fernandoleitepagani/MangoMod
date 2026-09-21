@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=MangoMod
+GenericName=Compositor Settings
+Comment=GUI Configuration Manager for the MangoWM Wayland Compositor
+Exec=mangomod
+Icon=io.github.mangomod
+Terminal=false
+Categories=Utility;Settings;DesktopSettings;
+Keywords=compositor;windowmanager;wayland;mango;mangowm;settings;config;
+StartupNotify=true
+StartupWMClass=mangomod

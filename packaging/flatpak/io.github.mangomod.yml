@@ -1,0 +1,43 @@
+app-id: io.github.mangomod
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: mangomod
+
+finish-args:
+  # Wayland + X11 fallback
+  - --socket=wayland
+  # - --socket=fallback-x11
+  - --share=ipc
+  # Read/write access to MangoWM's config directory
+  - --filesystem=xdg-config/mango:rw
+  # Read/write access to MangoMod's own settings directory
+  - --filesystem=xdg-config/mangomod:rw
+  # Talk to the host compositor for reload / validation
+  # (spawns `mango msg reload` and `wlr-randr` on the host)
+  - --talk-name=org.freedesktop.Flatpak
+
+build-options:
+  env:
+    PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    PIP_NO_CACHE_DIR: '1'
+
+modules:
+  - name: mangomod
+    buildsystem: simple
+    build-commands:
+      # Build the wheel with hatchling
+      - python3 -m pip install --prefix=/app hatchling
+      - python3 -m pip install --prefix=/app .
+      # Install desktop entry, icon, and AppStream metadata
+      - install -Dm644 data/io.github.mangomod.desktop
+          /app/share/applications/io.github.mangomod.desktop
+      - install -Dm644 data/io.github.mangomod.metainfo.xml
+          /app/share/metainfo/io.github.mangomod.metainfo.xml
+      - install -Dm644 data/mangomod.svg
+          /app/share/icons/hicolor/scalable/apps/io.github.mangomod.svg
+    sources:
+      - type: git
+        url: https://github.com/fernandoleitepagani/MangoMod.git
+        tag: v0.6.0
+        commit: REPLACE_WITH_TAG_SHA

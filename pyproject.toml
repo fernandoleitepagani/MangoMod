@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "nirimod"
+name = "mangomod"
 version = "0.1.0"
-description = "A polished GTK4/libadwaita GUI configurator for the niri Wayland compositor"
+description = "A visual, interactive configuration interface for the MangoWM, forked and adapted from NiriMod."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -17,10 +17,10 @@ dependencies = [
 ]
 
 [project.scripts]
-nirimod = "nirimod.__main__:main"
+mangomod = "mangomod.__main__:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["nirimod"]
+packages = ["mangomod"]
 
 [tool.ruff.lint]
 ignore = ["E402"]

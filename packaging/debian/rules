@@ -1,0 +1,13 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --with python3 --buildsystem=pybuild
+
+override_dh_auto_install:
+	dh_auto_install
+	install -Dm644 data/io.github.mangomod.desktop \
+		debian/mangomod/usr/share/applications/io.github.mangomod.desktop
+	install -Dm644 data/io.github.mangomod.metainfo.xml \
+		debian/mangomod/usr/share/metainfo/io.github.mangomod.metainfo.xml
+	install -Dm644 data/mangomod.svg \
+		debian/mangomod/usr/share/icons/hicolor/scalable/apps/io.github.mangomod.svg

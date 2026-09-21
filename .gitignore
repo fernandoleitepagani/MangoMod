@@ -1,17 +1,14 @@
-# Python
 __pycache__/
 *.py[cod]
-
-# Virtual Environment
 .venv/
+uv.lock.bak
+*.egg-info/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
 
-# NiriMod Temporary Files
-*.kdl.bak
-*.kdl.tmp
-
-
-# Scratch / debug scripts
-/test_*.py
-
-# Nix
-result
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp

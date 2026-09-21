@@ -1,0 +1,31 @@
+Source: mangomod
+Section: utils
+Priority: optional
+Maintainer: Your Name <you@example.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-python,
+ python3-all,
+ python3-hatchling,
+ pybuild-plugin-pyproject,
+Standards-Version: 4.6.2
+Homepage: https://github.com/YOUR-USERNAME/MangoMod
+Vcs-Browser: https://github.com/YOUR-USERNAME/MangoMod
+Vcs-Git: https://github.com/YOUR-USERNAME/MangoMod.git
+Rules-Requires-Root: no
+
+Package: mangomod
+Architecture: all
+Depends:
+ ${python3:Depends},
+ ${misc:Depends},
+ python3-gi,
+ gir1.2-gtk-4.0,
+ gir1.2-adw-1,
+Recommends:
+ wlr-randr,
+Description: GTK4 configurator for the MangoWM Wayland compositor
+ MangoMod is a GTK4/libadwaita application for editing MangoWM
+ compositor configuration files. It reads and writes MangoWM's flat
+ key=value config format, including all source= included files, and
+ applies changes via mango msg reload.
