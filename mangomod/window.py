@@ -12,6 +12,9 @@ from mangomod import mango_config, mango_ipc
 from mangomod.state import AppState
 from mangomod.theme import CSS
 
+# Below this logical-pixel width the sidebar collapses into an overlay.
+COLLAPSE_THRESHOLD_PX = 720
+
 SIDEBAR_GROUPS = [
     ("Input", [
         ("input", "input-keyboard-symbolic", "Input"),
@@ -42,6 +45,12 @@ class MangoModWindow(Adw.ApplicationWindow):
         super().__init__(**kwargs)
         self.set_title("MangoMod")
         self.set_default_size(1060, 720)
+        self.set_size_request(360, 400)
+
+        # Explicit CSD state. Defaults are already True, but setting them
+        # ensures MangoWM's decoration negotiation sees a definite answer.
+        self.set_decorated(True)
+        self.set_resizable(True)
 
         self.app_state = AppState()
         self.app_state.load()
@@ -50,9 +59,11 @@ class MangoModWindow(Adw.ApplicationWindow):
         self._pages: dict[str, Gtk.Widget] = {}
         self._sidebar_rows: dict[str, Gtk.ListBoxRow] = {}
         self._sidebar_listboxes: dict[str, Gtk.ListBox] = {}
+        self._sidebar_toggle_buttons: list[Gtk.Button] = []
 
         self._load_css()
         self._build_ui()
+        self._setup_breakpoints()
 
     def _load_css(self):
         p = Gtk.CssProvider()
@@ -65,20 +76,16 @@ class MangoModWindow(Adw.ApplicationWindow):
         self._toast_overlay = Adw.ToastOverlay()
         self.set_content(self._toast_overlay)
 
-        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self._toast_overlay.set_child(root)
-
-        self._banner = Gtk.Label(
-            label="MangoWM is not running — changes will be saved but not applied live",
-            xalign=0,
-        )
-        self._banner.add_css_class("nm-mango-banner")
-        self._banner.set_visible(not self.app_state.mango_running)
-        root.append(self._banner)
-
-        self._split_view = Adw.NavigationSplitView()
+        self._split_view = Adw.OverlaySplitView()
         self._split_view.set_vexpand(True)
-        root.append(self._split_view)
+        self._split_view.set_collapsed(False)
+        self._split_view.set_show_sidebar(True)
+        self._split_view.set_pin_sidebar(False)
+        self._split_view.set_min_sidebar_width(220)
+        self._split_view.set_max_sidebar_width(320)
+        self._split_view.set_sidebar_width_fraction(0.25)
+        self._toast_overlay.set_child(self._split_view)
+
         self._split_view.set_sidebar(self._build_sidebar_nav())
         self._split_view.set_content(self._build_content_nav())
 
@@ -86,13 +93,47 @@ class MangoModWindow(Adw.ApplicationWindow):
         if SIDEBAR_PAGES:
             self._select_page(SIDEBAR_PAGES[0][0])
 
+    def _setup_breakpoints(self):
+        """Auto-collapse the sidebar below COLLAPSE_THRESHOLD_PX.
+
+        Breakpoints only touch `collapsed`. `show-sidebar` is left to the
+        user (via the toggle button) so the sidebar doesn't spontaneously
+        reappear after the user hides it.
+        """
+        collapse_bp = Adw.Breakpoint.new(
+            Adw.BreakpointCondition.parse(f"max-width: {COLLAPSE_THRESHOLD_PX}px")
+        )
+        collapse_bp.add_setter(self._split_view, "collapsed", True)
+        self.add_breakpoint(collapse_bp)
+
+        pin_bp = Adw.Breakpoint.new(
+            Adw.BreakpointCondition.parse(f"min-width: {COLLAPSE_THRESHOLD_PX + 1}px")
+        )
+        pin_bp.add_setter(self._split_view, "collapsed", False)
+        self.add_breakpoint(pin_bp)
+
+    def register_sidebar_toggle(self, btn: Gtk.Button):
+        """Called by make_toolbar_page() on every page.
+
+        Button is always visible. Clicking it toggles `show-sidebar`, which
+        works in both pinned and collapsed modes.
+        """
+        self._sidebar_toggle_buttons.append(btn)
+        btn.set_visible(True)
+
     def _build_sidebar_nav(self):
         nav = Adw.NavigationPage(title="MangoMod")
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        box.add_css_class("nm-sidebar-bg")
+
+        # The sidebar page's direct child must be an Adw.ToolbarView.
+        # libadwaita uses this structure to locate the CSD titlebar and
+        # set up client-side resize edges. Wrapping the content in a plain
+        # Gtk.Box instead breaks both the titlebar discovery and the
+        # resize-edge allocation on some compositors, including MangoWM.
+        sidebar_toolbar = Adw.ToolbarView()
+
         hdr = Adw.HeaderBar()
         hdr.set_title_widget(Adw.WindowTitle(title="MangoMod"))
-        box.append(hdr)
+        sidebar_toolbar.add_top_bar(hdr)
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -128,8 +169,8 @@ class MangoModWindow(Adw.ApplicationWindow):
             nav_box.append(lb)
 
         scroll.set_child(nav_box)
-        box.append(scroll)
-        nav.set_child(box)
+        sidebar_toolbar.set_content(scroll)
+        nav.set_child(sidebar_toolbar)
         return nav
 
     def _make_sidebar_row(self, pid, icon, label):
@@ -151,7 +192,19 @@ class MangoModWindow(Adw.ApplicationWindow):
 
     def _build_content_nav(self):
         self._content_nav = Adw.NavigationPage(title="")
+
+        # The content side already contains Adw.ToolbarView widgets (one per
+        # page), so the direct child can be a plain box. libadwaita walks
+        # into the stack to find the visible page's headerbar.
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+
+        self._banner = Gtk.Label(
+            label="MangoWM is not running — changes will be saved but not applied live",
+            xalign=0,
+        )
+        self._banner.add_css_class("nm-mango-banner")
+        self._banner.set_visible(not self.app_state.mango_running)
+        root.append(self._banner)
 
         self._stack = Gtk.Stack()
         self._stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
@@ -219,6 +272,21 @@ class MangoModWindow(Adw.ApplicationWindow):
                 self._pages[pid] = obj
                 self._stack.add_named(w, pid)
 
+    # ── Sidebar toggle ──────────────────────────────────────────────
+
+    def _toggle_sidebar(self, *_):
+        """Toggle sidebar visibility. Works in both pinned and collapsed modes."""
+        self._split_view.set_show_sidebar(
+            not self._split_view.get_show_sidebar()
+        )
+
+    def _hide_sidebar(self, *_):
+        """Only auto-hide after page selection in collapsed/overlay mode."""
+        if self._split_view.get_collapsed():
+            self._split_view.set_show_sidebar(False)
+
+    # ── Sidebar / page selection ────────────────────────────────────
+
     def _on_row_selected(self, _lb, row):
         if row is None:
             return
@@ -240,6 +308,7 @@ class MangoModWindow(Adw.ApplicationWindow):
             r = self._sidebar_rows.get(p)
             if r and p == pid:
                 lb.select_row(r)
+        self._hide_sidebar()
         page = self._pages.get(pid)
         if page and hasattr(page, "on_shown"):
             page.on_shown()
@@ -256,6 +325,16 @@ class MangoModWindow(Adw.ApplicationWindow):
         p = Gio.SimpleAction.new("open_preferences", None)
         p.connect("activate", lambda *_: self._open_preferences())
         self.add_action(p)
+
+        toggle = Gio.SimpleAction.new("toggle-sidebar", None)
+        toggle.connect("activate", lambda *_: self._toggle_sidebar())
+        self.add_action(toggle)
+        app.set_accels_for_action("win.toggle-sidebar", ["F9", "<Control>b"])
+
+        esc = Gio.SimpleAction.new("close-sidebar", None)
+        esc.connect("activate", lambda *_: self._hide_sidebar())
+        self.add_action(esc)
+        app.set_accels_for_action("win.close-sidebar", ["Escape"])
 
     def get_config(self):
         return self.app_state.config

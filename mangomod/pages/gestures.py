@@ -48,7 +48,7 @@ class GesturesPage(BasePage):
         content.append(hot)
 
         # ── Focus & Cursor ──────────────────────────────────────────
-        focus = Adw.PreferencesGroup(title="Focus & Cursor")
+        focus = Adw.PreferencesGroup(title="Focus &amp; Cursor")
         self._add_bool(focus, "focus_on_activate", "Focus on Activate",
                        subtitle="Focus a window when an app requests activation",
                        default=True)
@@ -63,7 +63,7 @@ class GesturesPage(BasePage):
         content.append(focus)
 
         # ── Tiling & Snapping ───────────────────────────────────────
-        tiling = Adw.PreferencesGroup(title="Tiling & Snapping")
+        tiling = Adw.PreferencesGroup(title="Tiling &amp; Snapping")
         self._add_bool(tiling, "enable_floating_snap", "Enable Floating Snap",
                        default=False)
         self._add_int(tiling, "snap_distance", "Snap Distance (px)", default=30,

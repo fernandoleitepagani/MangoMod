@@ -24,6 +24,7 @@ MANGO_ACTIONS = [
     "setlayout", "switch_layout", "focuslast",
     "movecenter", "moveabsolute", "movetotag",
     "movetomon", "move", "resize", "killunsel",
+    "tagsilent", "togglescratchpad",
 ]
 
 
@@ -34,58 +35,46 @@ class BindingsPage(BasePage):
         self._rebuild_source: int | None = None
 
     def build(self):
-        tb = Adw.ToolbarView()
+        # Use the shared toolbar helper so the sidebar toggle button and
+        # hamburger menu are created and registered with the window.
+        tb, headerbar, _, content = self._make_toolbar_page("Keybindings")
 
-        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        header.set_margin_start(24)
-        header.set_margin_end(24)
-        header.set_margin_top(20)
-        header.set_margin_bottom(12)
-
+        # Custom large title placed inside the content area
         title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        title_box.set_hexpand(True)
-        t = Gtk.Label(label="Keybindings")
-        t.set_xalign(0.0)
-        t.add_css_class("title-1")
-        title_box.append(t)
+        title_box.set_margin_bottom(8)
+
+        title = Gtk.Label(label="Keybindings")
+        title.set_xalign(0.0)
+        title.add_css_class("title-1")
+        title_box.append(title)
+
         self._stats = Gtk.Label(label="")
         self._stats.set_xalign(0.0)
         self._stats.add_css_class("dim-label")
         self._stats.add_css_class("caption")
         title_box.append(self._stats)
-        header.append(title_box)
 
-        add = Gtk.Button(icon_name="list-add-symbolic")
-        add.set_tooltip_text("Add binding")
-        add.add_css_class("flat")
-        add.add_css_class("circular")
-        add.set_valign(Gtk.Align.CENTER)
-        add.connect("clicked", lambda *_: self._show_dialog(None, -1))
-        header.append(add)
+        content.append(title_box)
 
-        main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        main.append(header)
+        # Add-binding button lives in the headerbar, matching other pages
+        add_btn = Gtk.Button(icon_name="list-add-symbolic")
+        add_btn.set_tooltip_text("Add binding")
+        add_btn.add_css_class("flat")
+        add_btn.add_css_class("circular")
+        add_btn.set_valign(Gtk.Align.CENTER)
+        add_btn.connect("clicked", lambda *_: self._show_dialog(None, -1))
+        headerbar.pack_end(add_btn)
 
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_vexpand(True)
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        content.set_margin_start(32)
-        content.set_margin_end(32)
-        content.set_margin_top(24)
-        content.set_margin_bottom(32)
-        scroll.set_child(content)
-
+        # Search entry
         search = Gtk.SearchEntry(placeholder_text="Filter bindings…")
         search.connect("search-changed", self._on_search)
         content.append(search)
 
+        # Bindings list
         self._listbox = Gtk.ListBox()
         self._listbox.set_selection_mode(Gtk.SelectionMode.NONE)
         self._listbox.add_css_class("boxed-list")
         content.append(self._listbox)
-
-        main.append(scroll)
-        tb.set_content(main)
 
         self.refresh()
         return tb

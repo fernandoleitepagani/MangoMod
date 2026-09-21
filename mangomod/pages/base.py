@@ -16,6 +16,20 @@ if TYPE_CHECKING:
 def make_toolbar_page(title, window=None):
     tb = Adw.ToolbarView()
     header = Adw.HeaderBar()
+
+    if window is not None:
+        # Sidebar toggle button. Its visibility is bound to the split view's
+        # `collapsed` property in window.register_sidebar_toggle(), so it
+        # appears only when the sidebar is in overlay mode.
+        toggle_btn = Gtk.Button(icon_name="sidebar-show-symbolic")
+        toggle_btn.add_css_class("flat")
+        toggle_btn.add_css_class("circular")
+        toggle_btn.set_tooltip_text("Show menu (F9)")
+        toggle_btn.set_focus_on_click(False)
+        toggle_btn.connect("clicked", lambda *_: window._toggle_sidebar())
+        header.pack_start(toggle_btn)
+        window.register_sidebar_toggle(toggle_btn)
+
     tb.add_top_bar(header)
 
     if window is not None:
@@ -23,6 +37,7 @@ def make_toolbar_page(title, window=None):
         menu.append("Preferences", "win.open_preferences")
         btn = Gtk.MenuButton(icon_name="open-menu-symbolic")
         btn.add_css_class("flat")
+        btn.add_css_class("circular")
         btn.set_menu_model(menu)
         header.pack_end(btn)
 
@@ -41,8 +56,6 @@ def make_toolbar_page(title, window=None):
 
 
 class _SuspendCtx:
-    """Context manager: run code with _commit suppressed."""
-
     def __init__(self, page: "BasePage"):
         self._page = page
 

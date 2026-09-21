@@ -71,7 +71,7 @@ class AnimationsPage(BasePage):
         content.append(close_grp)
 
         # Move & Resize
-        move_grp = Adw.PreferencesGroup(title="Window Move & Resize")
+        move_grp = Adw.PreferencesGroup(title="Window Move &amp; Resize")
         self._add_int(move_grp, "animation_duration_move", "Duration (ms)", 500)
         self._add_str(move_grp, "animation_curve_move", "Curve (x1,y1,x2,y2)", "0.46,1.0,0.29,1")
         content.append(move_grp)
