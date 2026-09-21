@@ -37,7 +37,6 @@ pause() {
 }
 
 ask() {
-  # ask <prompt> <default>  → returns 0 for yes, 1 for no
   local prompt="$1" default="${2:-y}"
   local yn_hint
   [[ "$default" == "y" ]] && yn_hint="[Y/n]" || yn_hint="[y/N]"
@@ -57,11 +56,10 @@ detect_distro() {
   DISTRO=""
   DISTRO_PRETTY=""
   DISTRO_LIKE=""
-  PM=""   # detected package manager
+  PM=""
   IMAGE_BUILT_OS=0
 
   if [ -f /etc/os-release ]; then
-    # shellcheck source=/dev/null
     . /etc/os-release
     DISTRO="${ID:-}"
     DISTRO_PRETTY="${PRETTY_NAME:-$ID}"
@@ -70,7 +68,6 @@ detect_distro() {
 
   detect_image_built_os
 
-  # Normalize distro id using ID_LIKE fallback
   case "$DISTRO" in
     arch|manjaro|endeavouros|garuda|artix|parabola)
       PM="pacman" ;;
@@ -83,7 +80,6 @@ detect_distro() {
     gentoo)
       PM="emerge" ;;
     *)
-      # Try ID_LIKE
       if   [[ "$DISTRO_LIKE" == *"arch"* ]];   then PM="pacman"
       elif [[ "$DISTRO_LIKE" == *"fedora"* ]] || [[ "$DISTRO_LIKE" == *"rhel"* ]]; then PM="dnf"
       elif [[ "$DISTRO_LIKE" == *"suse"* ]];   then PM="zypper"
@@ -93,14 +89,10 @@ detect_distro() {
       ;;
   esac
 
-  # Verify the detected package manager actually exists. On image-built Fedora,
-  # keep the Fedora package family even if dnf is absent; dependency checks use rpm
-  # and missing packages are reported without attempting a dnf install.
   if [ -n "$PM" ] && [ "$IMAGE_BUILT_OS" -ne 1 ] && ! command -v "$PM" &>/dev/null; then
     PM=""
   fi
 
-  # Last resort: probe which package manager is installed
   if [ -z "$PM" ]; then
     if   command -v pacman  &>/dev/null; then PM="pacman"
     elif command -v dnf     &>/dev/null; then PM="dnf"
@@ -156,7 +148,6 @@ install_pkgs() {
 }
 
 pkg_installed() {
-  # Returns 0 if the package is installed, 1 otherwise
   local pkg="$1"
   case "$PM" in
     pacman) pacman -Qi "$pkg" &>/dev/null ;;
@@ -221,7 +212,6 @@ run_uv() {
 resolve_deps() {
   MISSING=()
 
-  # Baseline tools
   if ! cmd_exists git; then
     case "$PM" in
       pacman) MISSING+=("git") ;;
@@ -231,7 +221,6 @@ resolve_deps() {
       emerge) MISSING+=("dev-vcs/git") ;;
     esac
   fi
-
 
   if ! cmd_exists curl; then
     case "$PM" in
@@ -253,7 +242,6 @@ resolve_deps() {
     esac
   fi
 
-  # GTK4
   case "$PM" in
     pacman)
       pkg_installed gtk4           || MISSING+=("gtk4") ;;
@@ -267,7 +255,6 @@ resolve_deps() {
       pkg_installed gui-libs/gtk   || MISSING+=("gui-libs/gtk") ;;
   esac
 
-  # libadwaita
   case "$PM" in
     pacman)
       pkg_installed libadwaita           || MISSING+=("libadwaita") ;;
@@ -281,7 +268,6 @@ resolve_deps() {
       pkg_installed gui-libs/libadwaita  || MISSING+=("gui-libs/libadwaita") ;;
   esac
 
-  # PyGObject / GObject Introspection
   case "$PM" in
     pacman)
       pkg_installed python-gobject || MISSING+=("python-gobject") ;;
@@ -299,7 +285,6 @@ resolve_deps() {
       ;;
   esac
 
-  # GObject typelibs (needed at runtime for gi.require_version)
   case "$PM" in
     dnf)
       pkg_installed gtk4       || MISSING+=("gtk4")
@@ -315,28 +300,20 @@ resolve_deps() {
       ;;
   esac
 
-  # Optional runtime tools used by the Outputs page
+  # Optional: wlr-randr (used by Outputs page; harmless if missing)
   case "$PM" in
-    pacman)
-      pkg_installed wlr-randr || MISSING+=("wlr-randr") ;;
-    dnf)
-      pkg_installed wlr-randr || MISSING+=("wlr-randr") ;;
-    zypper)
-      pkg_installed wlr-randr || MISSING+=("wlr-randr") ;;
-    apt)
-      pkg_installed wlr-randr || MISSING+=("wlr-randr") ;;
-    emerge)
-      pkg_installed gui-apps/wlr-randr || MISSING+=("gui-apps/wlr-randr") ;;
+    pacman) pkg_installed wlr-randr || MISSING+=("wlr-randr") ;;
+    dnf)    pkg_installed wlr-randr || MISSING+=("wlr-randr") ;;
+    zypper) pkg_installed wlr-randr || MISSING+=("wlr-randr") ;;
+    apt)    pkg_installed wlr-randr || MISSING+=("wlr-randr") ;;
+    emerge) pkg_installed gui-apps/wlr-randr || MISSING+=("gui-apps/wlr-randr") ;;
   esac
 
-  # Deduplicate
   if [ ${#MISSING[@]} -gt 0 ]; then
-    # Remove duplicate entries
     mapfile -t MISSING < <(printf '%s\n' "${MISSING[@]}" | sort -u)
   fi
 }
 
-# Full Dependency Check
 check_dependencies() {
   step "Checking System Dependencies"
   detect_image_built_os
@@ -372,7 +349,6 @@ check_dependencies() {
     fi
   fi
 
-  # MangoWM compositor check (optional warning)
   if ! cmd_exists mango; then
     warn "The 'mango' compositor was not found on PATH."
     warn "MangoMod requires MangoWM to be running. Install it separately if needed."
@@ -380,22 +356,18 @@ check_dependencies() {
     echo ""
   fi
 
-  # uv
   step "Checking uv (Python Environment Manager)"
   if ! cmd_exists uv; then
     warn "'uv' is not installed. It is required to manage MangoMod's Python environment."
     if ask "Install 'uv' via the official installer (astral.sh)?"; then
       info "Downloading and running the uv installer..."
       run_with_filtered_preload bash -c 'set -euo pipefail; curl -LsSf https://astral.sh/uv/install.sh | sh'
-      # Make cargo/uv available in current session
       export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
       if [ -f "$HOME/.cargo/env" ]; then
-        # shellcheck source=/dev/null
         source "$HOME/.cargo/env"
       fi
       if ! cmd_exists uv; then
         error "'uv' was installed but is not on PATH. Please restart your shell and re-run this installer."
-        error "Or run:  export PATH=\"\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH\""
         exit 1
       fi
       success "'uv' installed successfully: $(run_uv --version)"
@@ -408,7 +380,6 @@ check_dependencies() {
   fi
 }
 
-# Download / Update Source
 download_source() {
   step "Fetching Source Code"
   if [ -d "$INSTALL_DIR/.git" ]; then
@@ -423,22 +394,18 @@ download_source() {
   success "Source code is ready."
 }
 
-# Build & Wire Up
 install_app() {
   step "Setting Up Python Environment"
   cd "$INSTALL_DIR"
 
   info "Creating virtual environment with system site-packages..."
-  rm -rf .venv # Ensure clean state
+  rm -rf .venv
   run_uv venv --system-site-packages --python python3
   run_uv sync --no-dev
 
-  # Verification check
   if ! run_uv run python -c "import gi" &>/dev/null; then
     warn "Virtual environment installed, but 'gi' (PyGObject) is still not found."
-    warn "This typically happens if the system bindings are missing or Python version mismatch exists."
 
-    # Try to diagnose
     local host_python_ver
     host_python_ver=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
     info "Host Python: $host_python_ver"
@@ -457,11 +424,16 @@ install_app() {
   fi
   success "Python environment ready and verified."
 
-  # Launcher script
+  # ── Launcher script ─────────────────────────────────────────────────
+  # Mirrors the pattern used by the original NiriMod installer:
+  #   * export PATH so `uv` is reachable regardless of the shell environment
+  #   * export PYTHONPATH so the package is importable even if the venv
+  #     didn't get a proper editable install of the project
+  #   * cd into INSTALL_DIR so `uv run` finds pyproject.toml
+  #   * use `python3` explicitly (the venv inherits system site-packages)
   step "Creating Launcher"
   mkdir -p "$BIN_DIR"
 
-  # Generate launcher script
   cat > "$BIN_DIR/mangomod" << EOF
 #!/usr/bin/env bash
 # MangoMod launcher — auto-generated by install.sh
@@ -481,12 +453,25 @@ EOF
   chmod +x "$BIN_DIR/mangomod"
   success "Launcher created: $BIN_DIR/mangomod"
 
-  # Desktop entry
+  # ── Smoke test the launcher ─────────────────────────────────────────
+  # This catches PATH / venv / import problems *during* install, instead of
+  # silently failing when the user clicks the desktop icon later.
+  step "Verifying Launcher"
+  if ! "$BIN_DIR/mangomod" --version &>/dev/null; then
+    warn "Launcher smoke test failed. Running it verbosely to diagnose:"
+    echo "───────────────────────────────────────────────"
+    "$BIN_DIR/mangomod" --version || true
+    echo "───────────────────────────────────────────────"
+    warn "The app may still work from a terminal. Check the output above."
+  else
+    success "Launcher responds correctly."
+  fi
+
+  # ── Desktop entry ───────────────────────────────────────────────────
   step "Installing Desktop Entry"
   mkdir -p "$DESKTOP_FILE_DIR"
   mkdir -p "$ICON_DIR"
 
-  # Copy icon if it exists in the repo
   if [ -f "$INSTALL_DIR/data/mangomod.svg" ]; then
     cp "$INSTALL_DIR/data/mangomod.svg" "$ICON_DIR/mangomod.svg"
     ICON_NAME="mangomod"
@@ -513,7 +498,6 @@ StartupNotify=true
 StartupWMClass=mangomod
 EOF
 
-  # Refresh desktop database if available
   if cmd_exists update-desktop-database; then
     update-desktop-database "$DESKTOP_FILE_DIR" 2>/dev/null || true
   fi
@@ -545,7 +529,6 @@ EOF
   info "Launch from your app menu, or run: ${CYAN}~/.local/bin/mangomod${NC}"
 }
 
-# Uninstall
 uninstall() {
   step "Uninstalling MangoMod"
   warn "This will remove:"
@@ -573,7 +556,6 @@ uninstall() {
   exit 0
 }
 
-# Menu
 main_menu() {
   while true; do
     print_banner
@@ -608,12 +590,6 @@ main_menu() {
     esac
   done
 }
-
-# Entry Point
-# Flags:
-#   --install        Download from GitHub and install (non-interactive)
-#   --uninstall      Remove MangoMod (non-interactive)
-#   --skip-deps      Skip system package manager checks (useful for Gentoo/unsupported distros)
 
 MODE=""
 SKIP_DEPS=0
