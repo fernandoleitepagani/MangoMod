@@ -47,8 +47,6 @@ class MangoModWindow(Adw.ApplicationWindow):
         self.set_default_size(1060, 720)
         self.set_size_request(360, 400)
 
-        # Explicit CSD state. Defaults are already True, but setting them
-        # ensures MangoWM's decoration negotiation sees a definite answer.
         self.set_decorated(True)
         self.set_resizable(True)
 
@@ -59,7 +57,8 @@ class MangoModWindow(Adw.ApplicationWindow):
         self._pages: dict[str, Gtk.Widget] = {}
         self._sidebar_rows: dict[str, Gtk.ListBoxRow] = {}
         self._sidebar_listboxes: dict[str, Gtk.ListBox] = {}
-        self._sidebar_toggle_buttons: list[Gtk.Button] = []
+        self._content_toggle_buttons: list[Gtk.Button] = []
+        self._sidebar_header_toggle: Gtk.Button | None = None
 
         self._load_css()
         self._build_ui()
@@ -84,6 +83,9 @@ class MangoModWindow(Adw.ApplicationWindow):
         self._split_view.set_min_sidebar_width(220)
         self._split_view.set_max_sidebar_width(320)
         self._split_view.set_sidebar_width_fraction(0.25)
+        # Whenever the sidebar is shown/hidden, update both toggle button
+        # groups so the visible group matches the sidebar state.
+        self._split_view.connect("notify::show-sidebar", self._on_show_sidebar_changed)
         self._toast_overlay.set_child(self._split_view)
 
         self._split_view.set_sidebar(self._build_sidebar_nav())
@@ -112,26 +114,47 @@ class MangoModWindow(Adw.ApplicationWindow):
         pin_bp.add_setter(self._split_view, "collapsed", False)
         self.add_breakpoint(pin_bp)
 
-    def register_sidebar_toggle(self, btn: Gtk.Button):
-        """Called by make_toolbar_page() on every page.
+    # ── Sidebar toggle registration ─────────────────────────────────
 
-        Button is always visible. Clicking it toggles `show-sidebar`, which
-        works in both pinned and collapsed modes.
+    def register_sidebar_toggle(self, btn: Gtk.Button):
+        """Called by make_toolbar_page() on every content page.
+
+        Content-side toggle buttons are shown only when the sidebar is
+        hidden; the sidebar header button handles the opposite case.
         """
-        self._sidebar_toggle_buttons.append(btn)
-        btn.set_visible(True)
+        self._content_toggle_buttons.append(btn)
+        btn.set_visible(not self._split_view.get_show_sidebar())
+
+    def _on_show_sidebar_changed(self, split_view, _):
+        show = split_view.get_show_sidebar()
+        for btn in self._content_toggle_buttons:
+            btn.set_visible(not show)
+        if self._sidebar_header_toggle is not None:
+            self._sidebar_header_toggle.set_visible(show)
+
+    # ── Sidebar construction ────────────────────────────────────────
 
     def _build_sidebar_nav(self):
         nav = Adw.NavigationPage(title="MangoMod")
 
-        # The sidebar page's direct child must be an Adw.ToolbarView.
-        # libadwaita uses this structure to locate the CSD titlebar and
-        # set up client-side resize edges. Wrapping the content in a plain
-        # Gtk.Box instead breaks both the titlebar discovery and the
-        # resize-edge allocation on some compositors, including MangoWM.
         sidebar_toolbar = Adw.ToolbarView()
 
         hdr = Adw.HeaderBar()
+
+        # Toggle button sits to the left of the "MangoMod" title. It is
+        # visible only while the sidebar itself is on screen — clicking it
+        # hides the sidebar and the mirror button in the content header
+        # takes over to bring it back.
+        sidebar_toggle = Gtk.Button(icon_name="sidebar-show-symbolic")
+        sidebar_toggle.add_css_class("flat")
+        sidebar_toggle.add_css_class("circular")
+        sidebar_toggle.set_tooltip_text("Hide menu (F9)")
+        sidebar_toggle.set_focus_on_click(False)
+        sidebar_toggle.connect("clicked", lambda *_: self._split_view.set_show_sidebar(False))
+        sidebar_toggle.set_visible(self._split_view.get_show_sidebar())
+        hdr.pack_start(sidebar_toggle)
+        self._sidebar_header_toggle = sidebar_toggle
+
         hdr.set_title_widget(Adw.WindowTitle(title="MangoMod"))
         sidebar_toolbar.add_top_bar(hdr)
 
@@ -193,9 +216,6 @@ class MangoModWindow(Adw.ApplicationWindow):
     def _build_content_nav(self):
         self._content_nav = Adw.NavigationPage(title="")
 
-        # The content side already contains Adw.ToolbarView widgets (one per
-        # page), so the direct child can be a plain box. libadwaita walks
-        # into the stack to find the visible page's headerbar.
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
         self._banner = Gtk.Label(
